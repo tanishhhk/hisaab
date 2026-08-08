@@ -22,7 +22,13 @@ export interface Split {
 export interface Expense {
   id: string;
   title: string;
+  // The single payer. Kept as the canonical field so trips saved before split
+  // payments existed still load, and so it can carry the first payer when
+  // several people paid.
   payerId: string;
+  // Present only when more than one person put money in. When absent, payerId
+  // covered the whole total. Never read this directly, use payersOf().
+  payers?: Split[];
   total: number;
   splits: Split[];
   category: string;
@@ -121,6 +127,15 @@ export function csvCell(value: string | number): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// Who actually put money in, and how much. An expense saved before split
+// payments existed has no `payers`, and for it the single payerId covered the
+// whole total. Every part of the app that credits a payment goes through here,
+// so there is one definition rather than a fallback repeated six times.
+export function payersOf(e: Expense): Split[] {
+  if (e.payers && e.payers.length > 0) return e.payers;
+  return [{ memberId: e.payerId, amount: Number(e.total) }];
+}
+
 // A member is active unless explicitly retired. Trips saved before soft-delete
 // existed have no `active` field, so `undefined` has to read as active.
 export function isActive(m: Member): boolean {
@@ -143,7 +158,8 @@ export function ledgerMembers(trip: Trip): Member[] {
   return trip.members.filter((m: Member) =>
     isActive(m) ||
     trip.expenses.some((e: Expense) =>
-      e.payerId === m.id || e.splits.some((s: Split) => s.memberId === m.id)
+      payersOf(e).some((pay: Split) => pay.memberId === m.id) ||
+      e.splits.some((s: Split) => s.memberId === m.id)
     )
   );
 }
@@ -158,7 +174,9 @@ export function removalImpact(trip: Trip, memberId: string) {
     (e: Expense) => isEqualSplit(e) && e.splits.length > 1
   );
   return {
-    paidCount: trip.expenses.filter((e: Expense) => e.payerId === memberId).length,
+    paidCount: trip.expenses.filter((e: Expense) =>
+      payersOf(e).some((pay: Split) => pay.memberId === memberId)
+    ).length,
     involvedCount: involved.length,
     redistributableCount: redistributable.length,
     customCount: involved.filter((e: Expense) => !isEqualSplit(e)).length,
@@ -233,6 +251,8 @@ function categoryStyle(category: string): React.CSSProperties {
 
 export interface ExpenseDraft {
   title: string;
+  // Amounts keyed by member id. Empty means one person paid the whole total.
+  payerAmounts?: Record<string, string>;
   total: string;
   method: 'equal' | 'unequal';
   selected: string[];
@@ -240,12 +260,12 @@ export interface ExpenseDraft {
   members: Member[];
 }
 
-export type ExpenseErrors = Partial<Record<'title' | 'total' | 'participants' | 'splits', string>>;
+export type ExpenseErrors = Partial<Record<'title' | 'total' | 'participants' | 'splits' | 'payers', string>>;
 
 // Validation is pure and separate from the form so it can be tested directly
 // and reused by an edit flow. Returns every problem at once rather than
 // stopping at the first, so the user fixes one round instead of three.
-export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; splits: Split[] } {
+export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; splits: Split[]; payers: Split[] } {
   const errors: ExpenseErrors = {};
   if (!d.title.trim()) errors.title = 'Give this expense a name.';
 
@@ -253,6 +273,23 @@ export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; split
   if (!d.total.trim()) errors.total = 'Enter an amount.';
   else if (!Number.isFinite(amount)) errors.total = 'That is not a number.';
   else if (amount <= 0) errors.total = 'Amount must be more than zero.';
+
+  // Whoever paid must add up to the same total as whoever owes, or the ledger
+  // is wrong in a way that only shows up much later in the settlement.
+  const payerEntries: Split[] = d.payerAmounts
+    ? d.members
+        .map((m: Member) => ({ memberId: m.id, amount: Number(d.payerAmounts?.[m.id] || 0) }))
+        .filter((e: Split) => Number.isFinite(e.amount) && e.amount > 0)
+    : [];
+  if (payerEntries.length > 0 && Number.isFinite(amount)) {
+    const paid = payerEntries.reduce((a: number, b: Split) => a + b.amount, 0);
+    if (Math.abs(paid - amount) > 0.01) {
+      const diff = amount - paid;
+      errors.payers = diff > 0
+        ? `₹${currency(diff)} of the total is unaccounted for.`
+        : `₹${currency(-diff)} more was paid than the total.`;
+    }
+  }
 
   let splits: Split[] = [];
   if (d.method === 'equal') {
@@ -275,7 +312,7 @@ export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; split
       splits = entries;
     }
   }
-  return { errors, splits };
+  return { errors, splits, payers: errors.payers ? [] : payerEntries };
 }
 
 // A realistic trip so a first-time visitor can see the settlement maths work
@@ -461,22 +498,57 @@ function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
     onClose();
   };
 
+  // Naming a trip from a blank field is harder than it looks, so offer a few
+  // real shapes rather than leaving the box empty.
+  const suggestions = ['Goa weekend', 'Manali, December', 'Cousin’s wedding', 'Office offsite'];
+
   return (
     <Modal onClose={onClose} labelledBy="new-trip-title" width="max-w-md">
-      <h3 id="new-trip-title" className="font-display text-xl tracking-tight mb-3">Create new trip</h3>
+      <h3 id="new-trip-title" className="font-display text-2xl tracking-tight">
+        Name the trip
+      </h3>
+      <p className="mt-1.5 text-sm text-ink-muted">
+        You will add who came, and what they paid for, next.
+      </p>
+
       <input
-        className={`w-full rounded-lg bg-surface p-2.5 text-sm border transition ${error ? 'border-debit' : 'border-rule focus:border-accent'}`}
+        autoFocus
+        className={`mt-5 w-full rounded-full bg-surface px-4 py-3 text-[1.05rem] border transition focus:border-accent ${error ? 'border-debit' : 'border-rule-strong'}`}
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setName(e.target.value); if (error) setError(''); }}
         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') create(); }}
-        placeholder="Trip name"
+        placeholder="Indore, three nights"
         aria-invalid={!!error}
         aria-describedby={error ? 'new-trip-error' : undefined}
       />
       <FieldError id="new-trip-error" message={error} />
-      <div className="mt-4 flex gap-2 justify-end">
-        <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={onClose}>Cancel</button>
-        <button className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={create}>Create</button>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {suggestions.map((sug) => (
+          <button
+            key={sug}
+            type="button"
+            onClick={() => { setName(sug); setError(''); }}
+            className="rounded-full border border-rule px-3 py-1.5 text-sm text-ink-muted transition-colors hover:border-accent hover:bg-accent-soft hover:text-ink"
+          >
+            {sug}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-7 flex items-center justify-end gap-2 border-t border-rule pt-5">
+        <button
+          className="rounded-full px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+        <button
+          className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+          onClick={create}
+        >
+          Create trip
+        </button>
       </div>
     </Modal>
   );
@@ -599,6 +671,10 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
   const [selected, setSelected] = useState<string[]>(() => members.map((m: Member) => m.id));
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<ExpenseErrors>({});
+  // Off by default: one person paying is the common case and must stay a
+  // one-tap flow. Turning this on reveals an amount per member.
+  const [splitPayment, setSplitPayment] = useState<boolean>(false);
+  const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
 
   // Errors are raised on submit, then cleared as the user addresses them, so
   // the form never nags about a field they are still filling in.
@@ -639,8 +715,9 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
   };
 
   const submit = () => {
-    const { errors: found, splits } = validateExpense({
+    const { errors: found, splits, payers } = validateExpense({
       title, total, method, selected, customSplits, members,
+      payerAmounts: splitPayment ? payerAmounts : undefined,
     });
     setErrors(found);
     if (Object.keys(found).length > 0) return;
@@ -648,7 +725,10 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
     onAdd({
       id: uid('e_'),
       title: title.trim(),
-      payerId,
+      // The first payer stays in payerId so anything reading the old field
+      // still sees a real person rather than an empty string.
+      payerId: payers.length > 0 ? payers[0].memberId : payerId,
+      ...(payers.length > 1 ? { payers } : {}),
       total: Number(total),
       splits,
       category,
@@ -660,6 +740,8 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
     setSelected(members.map((m: Member) => m.id));
     setCustomSplits({});
     setMethod('equal');
+    setPayerAmounts({});
+    setSplitPayment(false);
     setErrors({});
   };
 
@@ -702,6 +784,44 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         </select>
       </div>
       <FieldError id="expense-total-error" message={errors.total} />
+
+      <div className="mb-3">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-ink-muted">
+          <input
+            type="checkbox"
+            checked={splitPayment}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              setSplitPayment(e.target.checked);
+              clearError('payers');
+            }}
+          />
+          More than one person paid
+        </label>
+
+        {splitPayment && (
+          <div className="mt-2 space-y-2 rounded-xl border border-rule p-3">
+            <p className="text-sm text-ink-subtle">
+              How much each of them put in. It has to add up to the total.
+            </p>
+            {members.map((m: Member) => (
+              <div key={m.id} className="flex items-center gap-2">
+                <div className="w-28 truncate text-sm">{m.name}</div>
+                <input
+                  inputMode="decimal"
+                  className={`flex-1 rounded-lg bg-surface p-2 text-sm tnum border transition ${errors.payers ? 'border-debit' : 'border-rule focus:border-accent'}`}
+                  value={payerAmounts[m.id] ?? ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setPayerAmounts((prev) => ({ ...prev, [m.id]: e.target.value }));
+                    clearError('payers');
+                  }}
+                  placeholder="0"
+                />
+              </div>
+            ))}
+            <FieldError id="expense-payers-error" message={errors.payers} />
+          </div>
+        )}
+      </div>
 
       <div className="mb-2">
         <div className="text-sm mb-1">Split method</div>
@@ -803,7 +923,7 @@ function ExpenseList({ expenses, members, onDelete }: ExpenseListProps) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{e.title}</div>
                   <div className="truncate text-sm text-ink-muted">
-                    {nameOf(e.payerId)} paid · {share}
+                    {payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid · {share}
                   </div>
                 </div>
 
@@ -845,7 +965,9 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
   });
 
   trip.expenses.forEach((e: Expense) => {
-    totalsByMemberPaid[e.payerId] = (totalsByMemberPaid[e.payerId] || 0) + Number(e.total);
+    payersOf(e).forEach((pay: Split) => {
+      totalsByMemberPaid[pay.memberId] = (totalsByMemberPaid[pay.memberId] || 0) + Number(pay.amount);
+    });
     categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.total);
     e.splits.forEach((s: Split) => {
       totalsByMemberOwed[s.memberId] = (totalsByMemberOwed[s.memberId] || 0) + Number(s.amount);
@@ -1048,12 +1170,25 @@ export default function TripExpenseApp() {
 
   if (!seenLanding) {
     return (
-      <Landing
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onStart={() => { setSeenLanding(true); setShowNew(true); }}
-        onSample={() => { setSeenLanding(true); loadSample(); }}
-      />
+      <>
+        <Landing
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          signedIn={!!user}
+          onSignIn={isBackendConfigured ? () => setSignInReason('Keep your trips across devices.') : undefined}
+          onStart={() => { setSeenLanding(true); setShowNew(true); }}
+          onSample={() => { setSeenLanding(true); loadSample(); }}
+        />
+        {signInReason !== null && (
+          <Modal onClose={() => setSignInReason(null)} labelledBy="signin-title" width="max-w-md">
+            <SignIn
+              reason={signInReason || undefined}
+              onClose={() => setSignInReason(null)}
+              onSignedIn={() => setSignInReason(null)}
+            />
+          </Modal>
+        )}
+      </>
     );
   }
 
@@ -1216,7 +1351,7 @@ export default function TripExpenseApp() {
             new Date(exp.date).toLocaleDateString(),
             exp.title,
             exp.category,
-            nameOf(exp.payerId),
+            payersOf(exp).map((pay: Split) => `${nameOf(pay.memberId)} ${pay.amount}`).join('; '),
             exp.total.toString(),
             nameOf(split.memberId),
             split.amount.toString()
@@ -1261,7 +1396,7 @@ export default function TripExpenseApp() {
           'Date': new Date(exp.date).toLocaleDateString(),
           'Title': exp.title,
           'Category': exp.category,
-          'Paid By': nameOf(exp.payerId),
+          'Paid By': payersOf(exp).map((pay: Split) => `${nameOf(pay.memberId)} ${pay.amount}`).join('; '),
           'Total Amount': exp.total,
           'Participant': nameOf(split.memberId),
           'Split Amount': split.amount
@@ -1279,7 +1414,9 @@ export default function TripExpenseApp() {
       });
       
       current.expenses.forEach((e: Expense) => {
-        totalsByMemberPaid[e.payerId] = (totalsByMemberPaid[e.payerId] || 0) + Number(e.total);
+        payersOf(e).forEach((pay: Split) => {
+          totalsByMemberPaid[pay.memberId] = (totalsByMemberPaid[pay.memberId] || 0) + Number(pay.amount);
+        });
         e.splits.forEach((s: Split) => {
           totalsByMemberOwed[s.memberId] = (totalsByMemberOwed[s.memberId] || 0) + Number(s.amount);
         });

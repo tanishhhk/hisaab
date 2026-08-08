@@ -95,9 +95,11 @@ function HisaabWord() {
 // time onto ruled lines and the total climbs with them, ending at the same
 // 16,950 the settlement later resolves. The recording and the reckoning are
 // the same trip, seen twice.
-const LEDGER: { what: string; who: string; amount: number }[] = [
+const LEDGER: { what: string; who: string; amount: number; note?: string }[] = [
   { what: 'Hotel, two nights', who: 'Rohan', amount: 8600 },
-  { what: 'Sarafa street food', who: 'Asha', amount: 2400 },
+  // Two people put money in at the counter, which Hisaab records as two
+  // payments against one expense and still settles correctly.
+  { what: 'Sarafa street food', who: 'Asha and Rohan', amount: 2400, note: 'split payment' },
   { what: 'Cab to Mandu', who: 'Chetan', amount: 3500 },
   { what: 'Petrol', who: 'Asha', amount: 1000 },
   { what: '56 Dukan breakfast', who: 'Divya', amount: 1450 },
@@ -144,7 +146,14 @@ function LedgerStrip({ reduce }: { reduce: boolean }) {
           >
             <span className="min-w-0">
               <span className="block truncate text-[0.95rem]">{row.what}</span>
-              <span className="text-xs text-ink-subtle">{row.who} paid</span>
+              <span className="flex items-center gap-1.5 text-xs text-ink-subtle">
+                {row.who} paid
+                {row.note && (
+                  <span className="rounded-full bg-accent-soft px-1.5 py-0.5 font-medium text-accent">
+                    {row.note}
+                  </span>
+                )}
+              </span>
             </span>
             <span className="shrink-0 tnum text-[0.95rem]">&#8377;{inr(row.amount)}</span>
           </li>
@@ -368,9 +377,11 @@ function ChatBubble({ from, text, mine }: { from: string; text: string; mine?: b
   );
 }
 
-export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
+export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, onToggleTheme }: {
   onStart: () => void;
   onSample: () => void;
+  onSignIn?: () => void;
+  signedIn?: boolean;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
 }) {
@@ -405,6 +416,14 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
         <Wordmark />
         <div className="flex items-center gap-2">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+          {onSignIn && !signedIn && (
+            <button
+              onClick={onSignIn}
+              className="rounded-full px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+            >
+              Sign in
+            </button>
+          )}
           <button
             onClick={onStart}
             className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
@@ -461,6 +480,18 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
 
         <p className="mt-4 text-sm text-ink-subtle">
           No account needed. Nothing leaves your browser.
+          {onSignIn && !signedIn && (
+            <>
+              {' '}
+              <button
+                onClick={onSignIn}
+                className="rounded-full font-medium text-ink underline decoration-accent decoration-2 underline-offset-4 transition-opacity hover:opacity-70"
+              >
+                Create an account
+              </button>{' '}
+              to keep trips across devices.
+            </>
+          )}
         </p>
         </div>
 

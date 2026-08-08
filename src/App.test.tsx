@@ -8,6 +8,7 @@ import App, {
   isEqualSplit,
   ledgerMembers,
   removalImpact,
+  payersOf,
   sampleTrip,
   validateExpense,
   Expense,
@@ -256,6 +257,78 @@ describe('validateExpense', () => {
       draft({ method: 'unequal' as const, customSplits: { a: '100', ghost: '50' } })
     );
     expect(splits.map((s) => s.memberId)).toEqual(['a']);
+  });
+});
+
+describe('payersOf', () => {
+  it('treats an expense with no payers list as one person paying the lot', () => {
+    expect(payersOf(expense({ payerId: 'a', total: 250 }))).toEqual([
+      { memberId: 'a', amount: 250 },
+    ]);
+  });
+
+  it('returns the recorded payers when several people paid', () => {
+    const e = expense({
+      payerId: 'a',
+      total: 2400,
+      payers: [
+        { memberId: 'a', amount: 1400 },
+        { memberId: 'b', amount: 1000 },
+      ],
+    });
+    expect(payersOf(e).map((p) => p.memberId)).toEqual(['a', 'b']);
+    expect(sumPaise(payersOf(e))).toBe(240000);
+  });
+
+  it('ignores an empty payers list rather than crediting nobody', () => {
+    expect(payersOf(expense({ payerId: 'a', total: 100, payers: [] }))).toEqual([
+      { memberId: 'a', amount: 100 },
+    ]);
+  });
+});
+
+describe('validateExpense with several payers', () => {
+  const members = [
+    { id: 'a', name: 'Asha' },
+    { id: 'b', name: 'Rohan' },
+  ];
+  const draft = (over = {}) => ({
+    title: 'Sarafa street food',
+    total: '2400',
+    method: 'equal' as const,
+    selected: ['a', 'b'],
+    customSplits: {},
+    members,
+    ...over,
+  });
+
+  it('accepts two payers whose amounts add up to the total', () => {
+    const { errors, payers } = validateExpense(
+      draft({ payerAmounts: { a: '1400', b: '1000' } })
+    );
+    expect(errors).toEqual({});
+    expect(sumPaise(payers)).toBe(240000);
+  });
+
+  it('says how much is unaccounted for when the payers fall short', () => {
+    const { errors } = validateExpense(draft({ payerAmounts: { a: '1400', b: '500' } }));
+    expect(errors.payers).toMatch(/500\.00 of the total is unaccounted for/);
+  });
+
+  it('says how much extra was paid when the payers overshoot', () => {
+    const { errors } = validateExpense(draft({ payerAmounts: { a: '2000', b: '900' } }));
+    expect(errors.payers).toMatch(/500\.00 more was paid than the total/);
+  });
+
+  it('returns no payers when they do not reconcile, so nothing wrong is saved', () => {
+    const { payers } = validateExpense(draft({ payerAmounts: { a: '1', b: '1' } }));
+    expect(payers).toEqual([]);
+  });
+
+  it('leaves single payer expenses alone', () => {
+    const { errors, payers } = validateExpense(draft());
+    expect(errors.payers).toBeUndefined();
+    expect(payers).toEqual([]);
   });
 });
 
