@@ -42,7 +42,7 @@ export default function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggl
       onClick={onToggle}
       aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={dark ? 'Light mode' : 'Dark mode'}
-      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rule-strong text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rule-strong text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
     >
       {dark ? (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-[18px] w-[18px]">

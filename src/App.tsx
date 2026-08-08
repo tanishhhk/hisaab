@@ -597,7 +597,7 @@ function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberMod
       </div>
 
       <div className="flex justify-end mt-4">
-      <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={onClose}>Cancel</button>
+      <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={onClose}>Cancel</button>
       </div>
     </Modal>
   );
@@ -618,8 +618,8 @@ function TripCard({ trip, onOpen, onDelete }: TripCardProps) {
         </div>
       </div>
       <div className="mt-4 flex gap-2">
-        <button className="flex-1 inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={() => onOpen(trip.id)}>Open</button>
-        <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={() => onDelete(trip.id)}>Delete</button>
+        <button className="flex-1 inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={() => onOpen(trip.id)}>Open</button>
+        <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={() => onDelete(trip.id)}>Delete</button>
       </div>
     </div>
   );
@@ -635,10 +635,10 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
           value={name} 
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} 
           placeholder="Member name" 
-          className="flex-1 rounded-lg bg-surface p-2.5 text-sm border border-rule bg-surface transition focus:border-accent" 
+          className="min-w-[9rem] flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule transition focus:border-accent" 
         />
         <button 
-          className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+          className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
           onClick={() => { 
             if (!name.trim()) return; 
             addMember({ id: uid('m_'), name: name.trim() }); 
@@ -650,9 +650,9 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
       </div>
       <div className="flex flex-wrap gap-2">
         {members.map((m: Member) => (
-          <div key={m.id} className="flex items-center gap-2 rounded-full border border-rule bg-surface py-1 pl-3 pr-2 text-sm">
+          <div key={m.id} className="flex min-h-[2.75rem] items-center gap-1.5 rounded-full border border-rule bg-surface py-1 pl-4 pr-1.5 text-sm">
             <div className="text-sm">{m.name}</div>
-            <button className="rounded-full px-1.5 text-xs text-ink-subtle transition-colors hover:text-debit" onClick={() => onRequestRemove(m)} aria-label={`Remove ${m.name}`}>remove</button>
+            <button className="grid h-10 min-w-[2.5rem] place-items-center rounded-full px-2 text-xs text-ink-subtle transition-colors hover:bg-debit-soft hover:text-debit" onClick={() => onRequestRemove(m)} aria-label={`Remove ${m.name}`}>remove</button>
           </div>
         ))}
         {members.length === 0 && <div className="text-sm text-ink-subtle">No members yet</div>}
@@ -754,15 +754,15 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         placeholder="Expense title"
         aria-invalid={!!errors.title}
         aria-describedby={errors.title ? 'expense-title-error' : undefined}
-        className={`w-full rounded-lg bg-surface p-2.5 text-sm border transition ${errors.title ? 'border-debit' : 'border-rule focus:border-accent'}`}
+        className={`w-full min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border transition ${errors.title ? 'border-debit' : 'border-rule focus:border-accent'}`}
       />
       <FieldError id="expense-title-error" message={errors.title} />
       <div className="mb-2" />
-      <div className="flex gap-2 mb-2">
+      <div className="mb-2 flex flex-wrap gap-2">
         <select 
           value={payerId} 
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPayerId(e.target.value)} 
-          className="flex-1 rounded-lg bg-surface p-2.5 text-sm border border-rule bg-surface transition focus:border-accent"
+          className="min-w-[9rem] flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule transition focus:border-accent"
         >
           {members.map((m: Member) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
@@ -778,7 +778,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         <select 
           value={category} 
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategory(e.target.value)} 
-          className="w-36 rounded-lg bg-surface p-2.5 text-sm border border-rule bg-surface transition focus:border-accent"
+          className="min-w-[8rem] flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule bg-surface transition focus:border-accent"
         >
           {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -786,7 +786,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
       <FieldError id="expense-total-error" message={errors.total} />
 
       <div className="mb-3">
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-ink-muted">
+        <label className="inline-flex min-h-[2.75rem] cursor-pointer items-center gap-2 text-sm text-ink-muted">
           <input
             type="checkbox"
             checked={splitPayment}
@@ -808,7 +808,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
                 <div className="w-28 truncate text-sm">{m.name}</div>
                 <input
                   inputMode="decimal"
-                  className={`flex-1 rounded-lg bg-surface p-2 text-sm tnum border transition ${errors.payers ? 'border-debit' : 'border-rule focus:border-accent'}`}
+                  className={`flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm tnum border transition ${errors.payers ? 'border-debit' : 'border-rule focus:border-accent'}`}
                   value={payerAmounts[m.id] ?? ''}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setPayerAmounts((prev) => ({ ...prev, [m.id]: e.target.value }));
@@ -826,7 +826,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
       <div className="mb-2">
         <div className="text-sm mb-1">Split method</div>
         <div className="flex gap-2">
-          <label className={`px-3 py-1 border rounded ${method==='equal' ? 'bg-sunken' : ''}`}>
+          <label className={`flex min-h-[2.75rem] items-center gap-2 rounded-full border border-rule px-4 py-2 ${method==='equal' ? 'bg-sunken' : ''}`}>
             <input 
               type="radio" 
               name="method" 
@@ -834,7 +834,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
               onChange={() => setMethod('equal')} 
             /> Equal
           </label>
-          <label className={`px-3 py-1 border rounded ${method==='unequal' ? 'bg-sunken' : ''}`}>
+          <label className={`flex min-h-[2.75rem] items-center gap-2 rounded-full border border-rule px-4 py-2 ${method==='unequal' ? 'bg-sunken' : ''}`}>
             <input 
               type="radio" 
               name="method" 
@@ -849,7 +849,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         <div className="text-sm mb-1">Participants</div>
         <div className="flex flex-wrap gap-2">
           {members.map((m: Member) => (
-            <label key={m.id} className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${selected.includes(m.id) ? 'border-accent bg-accent-soft' : 'border-rule hover:bg-sunken'}`}>
+            <label key={m.id} className={`flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors ${selected.includes(m.id) ? 'border-accent bg-accent-soft' : 'border-rule hover:bg-sunken'}`}>
               <input
                 type="checkbox"
                 checked={selected.includes(m.id)}
@@ -884,12 +884,12 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
 
       <div className="flex gap-2 justify-end">
         <button 
-          className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+          className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
           onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); setErrors({}); }}
         >
           Reset
         </button>
-        <button className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={submit}>Add expense</button>
+        <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={submit}>Add expense</button>
       </div>
     </div>
   );
@@ -935,7 +935,7 @@ function ExpenseList({ expenses, members, onDelete }: ExpenseListProps) {
                 </div>
 
                 <button
-                  className="shrink-0 rounded-full p-2 text-ink-subtle opacity-0 transition-opacity hover:bg-debit-soft hover:text-debit focus-visible:opacity-100 group-hover:opacity-100"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-subtle transition-opacity hover:bg-debit-soft hover:text-debit sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
                   onClick={() => onDelete(e.id)}
                   aria-label={`Remove ${e.title}`}
                 >
@@ -1218,14 +1218,14 @@ export default function TripExpenseApp() {
                 <button
                   onClick={() => signOut()}
                   title={user.email || 'Signed in'}
-                  className="rounded-full px-3 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
+                  className="inline-flex min-h-[2.75rem] items-center rounded-full px-4 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
                 >
                   Sign out
                 </button>
               ) : (
                 <button
                   onClick={() => setSignInReason('')}
-                  className="rounded-full px-3 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
+                  className="inline-flex min-h-[2.75rem] items-center rounded-full px-4 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
                 >
                   Sign in
                 </button>
@@ -1242,7 +1242,7 @@ export default function TripExpenseApp() {
               </button>
             )}
             <button
-              className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+              className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
               onClick={() => setShowNew(true)}
             >
               New trip
@@ -1282,9 +1282,9 @@ export default function TripExpenseApp() {
                 <div className="text-sm text-ink-muted">Members: {activeMembers.length} • Expenses: {current.expenses.length}</div>
               </div>
               <div className="flex gap-2">
-                <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={closeTrip}>Back</button>
+                <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={closeTrip}>Back</button>
                 <button 
-                  className="inline-flex items-center justify-center rounded-full bg-debit px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-debit/88" 
+                  className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-debit px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-debit/88" 
                   onClick={() => { 
                     if (window.confirm('Delete this trip?')) { 
                       deleteTrip(current.id); 
@@ -1335,7 +1335,7 @@ export default function TripExpenseApp() {
                   <h2 className="font-display text-xl tracking-tight mb-3">Actions</h2>
 <div className="space-y-2">
   <button 
-    className="w-full inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+    className="w-full inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
     onClick={() => { 
       // Export to CSV
       const nameOf = (id: string): string => current.members.find((m: Member) => m.id === id)?.name || 'Unknown';
@@ -1372,7 +1372,7 @@ export default function TripExpenseApp() {
     Export CSV
   </button>
   <button 
-    className="w-full inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken disabled:cursor-not-allowed disabled:text-ink-subtle disabled:hover:bg-transparent"
+    className="w-full inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken disabled:cursor-not-allowed disabled:text-ink-subtle disabled:hover:bg-transparent"
     disabled={exportState === 'working'}
     onClick={async () => {
       // SheetJS is bundled, not fetched from a CDN, so export works offline.
