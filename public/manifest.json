@@ -1,6 +1,6 @@
 {
-  "short_name": "Trip Expenses",
-  "name": "Trip Expense Manager",
+  "short_name": "Hisaab",
+  "name": "Hisaab: settle up, to the last paisa",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,9 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "portrait-primary",
+  "description": "Settle up, to the last paisa.",
+  "categories": ["finance", "utilities", "travel"],
+  "theme_color": "#1a1815",
+  "background_color": "#fbf9f6"
 }

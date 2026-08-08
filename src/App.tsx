@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import Landing from './Landing';
+import ThemeToggle, { useTheme } from './ThemeToggle';
 
 // TypeScript Interfaces
 export interface Member {
@@ -85,7 +87,7 @@ function uid(prefix: string = ''): string {
 }
 
 // Display formatting only. Groups digits the Indian way (₹1,69,500.00), which
-// is what these amounts are read in. Never parse this back into a number —
+// is what these amounts are read in. Never parse this back into a number,
 // the separators make Number() return NaN.
 function currency(n: number): string {
   return (Math.round(n * 100) / 100).toLocaleString('en-IN', {
@@ -191,6 +193,42 @@ export function applyRemoval(trip: Trip, memberId: string, mode: RemovalMode): T
   return { ...trip, members, expenses };
 }
 
+// One authored set, drawn on a 24-grid at a single 1.75 stroke weight, so the
+// expense list reads as a system rather than a pile of borrowed glyphs.
+const CATEGORY_PATHS: Record<string, string> = {
+  bus: 'M4 16V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10M4 16h16M4 16v2m16-2v2M7 8h10M7 12h.01M17 12h.01',
+  auto: 'M5 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0M5 17H4v-5l3-6h7l3 6h1a2 2 0 0 1 2 2v3h-2M9 17h6',
+  petrol: 'M5 20V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v15M3 20h12M6 9h6M16 8l2 2v7a1.5 1.5 0 0 0 3 0v-6l-2-2',
+  car: 'M6 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0M14 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0M6 17H3v-4l2-5h9l3 5h3v4h-2M10 17h4M5 13h14',
+  hotel: 'M3 20V9l9-5 9 5v11M3 20h18M9 20v-5h6v5M8 11h.01M16 11h.01',
+  food: 'M6 3v8a2 2 0 0 0 4 0V3M8 11v10M18 3c-1.5 1.5-2 3.5-2 6v3h4V9c0-2.5-.5-4.5-2-6M18 12v9',
+  other: 'M12 8v.01M12 11v5M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18',
+};
+
+const CATEGORY_TINT: Record<string, string> = {
+  bus: '199 88 40',
+  auto: '176 132 16',
+  petrol: '90 118 60',
+  car: '52 118 128',
+  hotel: '96 96 168',
+  food: '184 78 96',
+  other: '124 116 104',
+};
+
+function CategoryIcon({ category, className = 'h-4 w-4' }: { category: string; className?: string }) {
+  const d = CATEGORY_PATHS[category] ?? CATEGORY_PATHS.other;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path d={d} stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function categoryStyle(category: string): React.CSSProperties {
+  const tint = CATEGORY_TINT[category] ?? CATEGORY_TINT.other;
+  return { color: `rgb(${tint})`, backgroundColor: `rgb(${tint} / 0.10)` };
+}
+
 export interface ExpenseDraft {
   title: string;
   total: string;
@@ -270,25 +308,25 @@ export function sampleTrip(): Trip {
 
 function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: () => void }) {
   return (
-    <section className="overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-slate-200/70">
+    <section className="overflow-hidden rounded-2xl border border-rule bg-surface">
       <div className="grid gap-8 p-8 sm:p-12 lg:grid-cols-2 lg:items-center">
         <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+          <h2 className="font-display text-4xl leading-[1.05] tracking-tight text-ink sm:text-5xl">
             Split trip costs.<br />Settle up in the fewest payments.
           </h2>
-          <p className="mt-4 max-w-md text-slate-600">
+          <p className="mt-4 max-w-md text-ink-muted">
             Add everyone who came, log what each person paid, and get the shortest
             list of transfers that squares the whole group up.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <button
-              className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
+              className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 font-medium text-canvas transition-colors hover:bg-ink/88"
               onClick={onCreate}
             >
               Create your first trip
             </button>
             <button
-              className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50"
+              className="inline-flex items-center justify-center rounded-full border border-rule-strong px-5 py-2.5 font-medium text-ink transition-colors hover:bg-sunken"
               onClick={onSample}
             >
               Try a sample trip
@@ -298,11 +336,8 @@ function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: ()
 
         {/* A still of the actual output, not decoration. aria-hidden because
             it repeats what the copy already says. */}
-        <div aria-hidden className="rounded-xl bg-slate-50 p-5 ring-1 ring-slate-200">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Who pays whom
-          </div>
-          <div className="mt-3 space-y-2">
+        <div aria-hidden className="rounded-xl bg-sunken p-5">
+          <div className="space-y-2">
             {[
               { from: 'Asha', to: 'Bilal', amt: '1,479.17' },
               { from: 'Chetan', to: 'Bilal', amt: '779.16' },
@@ -310,20 +345,20 @@ function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: ()
             ].map((r) => (
               <div
                 key={r.from}
-                className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-sm ring-1 ring-slate-200"
+                className="flex items-center justify-between rounded-lg bg-surface px-3 py-2.5 text-sm border border-rule"
               >
-                <span className="flex items-center gap-2 text-slate-700">
+                <span className="flex items-center gap-2 text-ink">
                   {r.from}
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-slate-400">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-ink-subtle">
                     <path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   {r.to}
                 </span>
-                <span className="font-semibold tnum text-slate-900">₹{r.amt}</span>
+                <span className="font-semibold tnum text-ink">₹{r.amt}</span>
               </div>
             ))}
           </div>
-          <div className="mt-3 text-xs text-slate-500">
+          <div className="mt-3 text-xs text-ink-subtle">
             Four people, five expenses, three transfers.
           </div>
         </div>
@@ -352,7 +387,7 @@ function useLocalState<T>(key: string, initial: T): [T, React.Dispatch<React.Set
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p id={id} role="alert" className="mt-1.5 text-sm text-debit-700">
+    <p id={id} role="alert" className="mt-1.5 text-sm text-debit">
       {message}
     </p>
   );
@@ -398,7 +433,7 @@ function Modal({ onClose, labelledBy, width, children }: {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm animate-fade-in"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
@@ -406,7 +441,7 @@ function Modal({ onClose, labelledBy, width, children }: {
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className={`w-full ${width} rounded-2xl bg-white p-6 shadow-lift animate-rise`}
+        className={`w-full ${width} rounded-2xl border border-rule bg-surface p-6 shadow-modal animate-rise`}
       >
         {children}
       </div>
@@ -426,9 +461,9 @@ function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
 
   return (
     <Modal onClose={onClose} labelledBy="new-trip-title" width="max-w-md">
-      <h3 id="new-trip-title" className="text-lg font-semibold mb-3">Create new trip</h3>
+      <h3 id="new-trip-title" className="font-display text-xl tracking-tight mb-3">Create new trip</h3>
       <input
-        className={`w-full rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset transition focus:ring-2 ${error ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
+        className={`w-full rounded-lg bg-surface p-2.5 text-sm border transition ${error ? 'border-debit' : 'border-rule focus:border-accent'}`}
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setName(e.target.value); if (error) setError(''); }}
         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') create(); }}
@@ -438,8 +473,8 @@ function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
       />
       <FieldError id="new-trip-error" message={error} />
       <div className="mt-4 flex gap-2 justify-end">
-        <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={onClose}>Cancel</button>
-        <button className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700" onClick={create}>Create</button>
+        <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={onClose}>Cancel</button>
+        <button className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={create}>Create</button>
       </div>
     </Modal>
   );
@@ -449,22 +484,22 @@ function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberMod
   const impact = removalImpact(trip, member.id);
   return (
     <Modal onClose={onClose} labelledBy="remove-member-title" width="max-w-lg">
-      <h3 id="remove-member-title" className="text-lg font-semibold mb-1">Remove {member.name}?</h3>
-      <div className="text-sm text-slate-600 mb-4">
+      <h3 id="remove-member-title" className="font-display text-xl tracking-tight mb-1">Remove {member.name}?</h3>
+      <div className="text-sm text-ink-muted mb-4">
         {impact.involvedCount === 0
           ? 'They are not part of any expense yet.'
           : `They are a participant in ${impact.involvedCount} expense${impact.involvedCount === 1 ? '' : 's'}.`}
         {impact.paidCount > 0 &&
-          ` They also paid for ${impact.paidCount} expense${impact.paidCount === 1 ? '' : 's'} — those payments stay in the summary either way.`}
+          ` They also paid for ${impact.paidCount} expense${impact.paidCount === 1 ? '' : 's'}, and those payments stay in the summary either way.`}
       </div>
 
       <div className="space-y-3">
         <button
-          className="w-full rounded-xl p-4 text-left ring-1 ring-slate-200 transition-colors hover:bg-brand-50 hover:ring-brand-200"
+          className="w-full rounded-xl border border-rule p-4 text-left transition-colors hover:border-accent hover:bg-accent-soft"
           onClick={() => onConfirm('redistribute')}
         >
           <div className="font-medium">Remove and split their share</div>
-          <div className="text-sm text-slate-600 mt-1">
+          <div className="text-sm text-ink-muted mt-1">
             {impact.redistributableCount > 0
               ? `Their share of ${impact.redistributableCount} equally-split expense${impact.redistributableCount === 1 ? '' : 's'} is divided across the remaining participants.`
               : 'No equally-split expenses to redistribute.'}
@@ -476,11 +511,11 @@ function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberMod
         </button>
 
         <button
-          className="w-full rounded-xl p-4 text-left ring-1 ring-slate-200 transition-colors hover:bg-brand-50 hover:ring-brand-200"
+          className="w-full rounded-xl border border-rule p-4 text-left transition-colors hover:border-accent hover:bg-accent-soft"
           onClick={() => onConfirm('keep')}
         >
           <div className="font-medium">Remove from future expenses only</div>
-          <div className="text-sm text-slate-600 mt-1">
+          <div className="text-sm text-ink-muted mt-1">
             Every existing expense stays exactly as recorded. {member.name} just stops
             being offered when you add new ones.
           </div>
@@ -488,7 +523,7 @@ function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberMod
       </div>
 
       <div className="flex justify-end mt-4">
-      <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={onClose}>Cancel</button>
+      <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={onClose}>Cancel</button>
       </div>
     </Modal>
   );
@@ -497,20 +532,20 @@ function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberMod
 function TripCard({ trip, onOpen, onDelete }: TripCardProps) {
   const total = trip.expenses.reduce((s: number, e: Expense) => s + Number(e.total), 0);
   return (
-    <div className="rounded-xl bg-white p-5 shadow-card ring-1 ring-slate-200/70 transition-shadow hover:shadow-lift">
+    <div className="rounded-2xl border border-rule bg-surface p-5 transition-colors hover:border-rule-strong">
       <div className="flex justify-between items-start">
         <div>
-          <h4 className="font-semibold text-lg">{trip.name}</h4>
-          <div className="text-sm text-slate-600">Members: {trip.members.filter(isActive).length} • Expenses: {trip.expenses.length}</div>
+          <h3 className="font-display text-lg tracking-tight">{trip.name}</h3>
+          <div className="text-sm text-ink-muted">Members: {trip.members.filter(isActive).length} • Expenses: {trip.expenses.length}</div>
         </div>
         <div className="text-right">
-          <div className="text-sm text-slate-600">Total</div>
+          <div className="text-sm text-ink-muted">Total</div>
           <div className="font-bold tnum">₹{currency(total)}</div>
         </div>
       </div>
       <div className="mt-4 flex gap-2">
-        <button className="flex-1 inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700" onClick={() => onOpen(trip.id)}>Open</button>
-        <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={() => onDelete(trip.id)}>Delete</button>
+        <button className="flex-1 inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={() => onOpen(trip.id)}>Open</button>
+        <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={() => onDelete(trip.id)}>Delete</button>
       </div>
     </div>
   );
@@ -519,17 +554,17 @@ function TripCard({ trip, onOpen, onDelete }: TripCardProps) {
 function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
   const [name, setName] = useState<string>('');
   return (
-    <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
-      <h5 className="font-medium mb-2">Members</h5>
+    <div className="rounded-2xl border border-rule bg-surface p-5">
+      <h2 className="font-display text-xl tracking-tight mb-3">Members</h2>
       <div className="flex gap-2 mb-3">
         <input 
           value={name} 
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} 
           placeholder="Member name" 
-          className="flex-1 rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600" 
+          className="flex-1 rounded-lg bg-surface p-2.5 text-sm border border-rule bg-surface transition focus:border-accent" 
         />
         <button 
-          className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
+          className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
           onClick={() => { 
             if (!name.trim()) return; 
             addMember({ id: uid('m_'), name: name.trim() }); 
@@ -541,12 +576,12 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
       </div>
       <div className="flex flex-wrap gap-2">
         {members.map((m: Member) => (
-          <div key={m.id} className="flex items-center gap-2 rounded-full bg-slate-100 py-1 pl-3 pr-2 text-sm ring-1 ring-slate-200">
+          <div key={m.id} className="flex items-center gap-2 rounded-full border border-rule bg-surface py-1 pl-3 pr-2 text-sm">
             <div className="text-sm">{m.name}</div>
-            <button className="text-xs text-red-600" onClick={() => onRequestRemove(m)}>remove</button>
+            <button className="rounded-full px-1.5 text-xs text-ink-subtle transition-colors hover:text-debit" onClick={() => onRequestRemove(m)} aria-label={`Remove ${m.name}`}>remove</button>
           </div>
         ))}
-        {members.length === 0 && <div className="text-sm text-slate-500">No members yet</div>}
+        {members.length === 0 && <div className="text-sm text-ink-subtle">No members yet</div>}
       </div>
     </div>
   );
@@ -590,9 +625,9 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
 
   if (members.length === 0) {
     return (
-      <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
-        <h5 className="font-medium mb-2">Add expense</h5>
-        <div className="text-sm text-slate-500">Add at least one member before recording an expense.</div>
+      <div className="rounded-2xl border border-rule bg-surface p-5">
+        <h2 className="font-display text-xl tracking-tight mb-3">Add expense</h2>
+        <div className="text-sm text-ink-subtle">Add at least one member before recording an expense.</div>
       </div>
     );
   }
@@ -627,7 +662,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
   };
 
   return (
-    <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
+    <div className="rounded-2xl border border-rule bg-surface p-5">
       <h5 className="font-medium mb-2">Add expense</h5>
       <input
         value={title}
@@ -635,7 +670,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         placeholder="Expense title"
         aria-invalid={!!errors.title}
         aria-describedby={errors.title ? 'expense-title-error' : undefined}
-        className={`w-full rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset transition focus:ring-2 ${errors.title ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
+        className={`w-full rounded-lg bg-surface p-2.5 text-sm border transition ${errors.title ? 'border-debit' : 'border-rule focus:border-accent'}`}
       />
       <FieldError id="expense-title-error" message={errors.title} />
       <div className="mb-2" />
@@ -643,7 +678,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         <select 
           value={payerId} 
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPayerId(e.target.value)} 
-          className="flex-1 rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600"
+          className="flex-1 rounded-lg bg-surface p-2.5 text-sm border border-rule bg-surface transition focus:border-accent"
         >
           {members.map((m: Member) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
@@ -654,12 +689,12 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
           placeholder="Total"
           aria-invalid={!!errors.total}
           aria-describedby={errors.total ? 'expense-total-error' : undefined}
-          className={`w-28 rounded-lg bg-white p-2.5 text-sm tnum ring-1 ring-inset transition focus:ring-2 ${errors.total ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
+          className={`w-28 rounded-lg bg-surface p-2.5 text-sm tnum border transition ${errors.total ? 'border-debit' : 'border-rule focus:border-accent'}`}
         />
         <select 
           value={category} 
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategory(e.target.value)} 
-          className="w-36 rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600"
+          className="w-36 rounded-lg bg-surface p-2.5 text-sm border border-rule bg-surface transition focus:border-accent"
         >
           {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -669,7 +704,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
       <div className="mb-2">
         <div className="text-sm mb-1">Split method</div>
         <div className="flex gap-2">
-          <label className={`px-3 py-1 border rounded ${method==='equal' ? 'bg-slate-100' : ''}`}>
+          <label className={`px-3 py-1 border rounded ${method==='equal' ? 'bg-sunken' : ''}`}>
             <input 
               type="radio" 
               name="method" 
@@ -677,7 +712,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
               onChange={() => setMethod('equal')} 
             /> Equal
           </label>
-          <label className={`px-3 py-1 border rounded ${method==='unequal' ? 'bg-slate-100' : ''}`}>
+          <label className={`px-3 py-1 border rounded ${method==='unequal' ? 'bg-sunken' : ''}`}>
             <input 
               type="radio" 
               name="method" 
@@ -692,7 +727,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         <div className="text-sm mb-1">Participants</div>
         <div className="flex flex-wrap gap-2">
           {members.map((m: Member) => (
-            <label key={m.id} className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-sm ring-1 transition-colors ${selected.includes(m.id) ? 'bg-brand-50 ring-brand-200' : 'ring-slate-300 hover:bg-slate-50'}`}>
+            <label key={m.id} className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${selected.includes(m.id) ? 'border-accent bg-accent-soft' : 'border-rule hover:bg-sunken'}`}>
               <input
                 type="checkbox"
                 checked={selected.includes(m.id)}
@@ -713,7 +748,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
                 <div className="w-28 text-sm">{m.name}</div>
                 <input
                   inputMode="decimal"
-                  className={`flex-1 rounded-lg bg-white p-2.5 text-sm tnum ring-1 ring-inset transition focus:ring-2 ${errors.splits ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
+                  className={`flex-1 rounded-lg bg-surface p-2.5 text-sm tnum border transition ${errors.splits ? 'border-debit' : 'border-rule focus:border-accent'}`}
                   value={customSplits[m.id] ?? ''}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setCustomSplits(prev => ({ ...prev, [m.id]: e.target.value })); clearError('splits'); }}
                   placeholder="0"
@@ -727,12 +762,12 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
 
       <div className="flex gap-2 justify-end">
         <button 
-          className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" 
+          className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
           onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); setErrors({}); }}
         >
           Reset
         </button>
-        <button className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700" onClick={submit}>Add expense</button>
+        <button className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={submit}>Add expense</button>
       </div>
     </div>
   );
@@ -741,31 +776,57 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
 function ExpenseList({ expenses, members, onDelete }: ExpenseListProps) {
   const nameOf = (id: string): string => members.find((m: Member) => m.id === id)?.name || 'Unknown';
   return (
-    <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
-      <h5 className="font-medium mb-2">Expenses</h5>
-      {expenses.length === 0 && <div className="text-sm text-slate-500">No expenses yet</div>}
-      <div className="space-y-2">
-        {expenses.map((e: Expense) => (
-          <div key={e.id} className="flex items-start justify-between gap-3 rounded-lg p-3 ring-1 ring-slate-200 transition-colors hover:bg-slate-50">
-            <div>
-              <div className="font-medium">{e.title} <span className="text-xs text-slate-500">({e.category})</span></div>
-              <div className="text-sm text-slate-600 tnum">Paid by {nameOf(e.payerId)} • ₹{currency(e.total)}</div>
-              <div className="text-sm mt-1">Split:</div>
-              <div className="flex gap-2 flex-wrap mt-1">
-                {e.splits.map((s: Split) => (
-                  <div key={s.memberId} className="rounded-md bg-slate-100 px-2 py-1 text-sm tnum ring-1 ring-slate-200/80">
-                    {members.find((m: Member) => m.id===s.memberId)?.name || s.memberId}: ₹{currency(s.amount)}
+    <div className="rounded-2xl border border-rule bg-surface p-5">
+      <h2 className="font-display text-xl tracking-tight">Expenses</h2>
+      {expenses.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-subtle">No expenses yet.</p>
+      ) : (
+        // Rows separated by rules rather than boxed individually: a list of
+        // ringed cards inside a card is three nested containers deep.
+        <ul className="mt-2 divide-y divide-rule">
+          {expenses.map((e: Expense) => {
+            const share = isEqualSplit(e) && e.splits.length > 1
+              ? `split ${e.splits.length} ways · ₹${currency(e.splits[0].amount)} each`
+              : `${e.splits.length} custom share${e.splits.length === 1 ? '' : 's'}`;
+            return (
+              <li key={e.id} className="group flex items-center gap-3 py-3">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                  style={categoryStyle(e.category)}
+                  title={e.category}
+                >
+                  <CategoryIcon category={e.category} />
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{e.title}</div>
+                  <div className="truncate text-sm text-ink-muted">
+                    {nameOf(e.payerId)} paid · {share}
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 items-end">
-              <div className="font-semibold tnum">₹{currency(e.total)}</div>
-              <button className="text-xs text-red-600" onClick={() => onDelete(e.id)}>remove</button>
-            </div>
-          </div>
-        ))}
-      </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <div className="font-semibold tnum">₹{currency(e.total)}</div>
+                  <div className="text-xs text-ink-subtle">
+                    {new Date(e.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </div>
+                </div>
+
+                <button
+                  className="shrink-0 rounded-full p-2 text-ink-subtle opacity-0 transition-opacity hover:bg-debit-soft hover:text-debit focus-visible:opacity-100 group-hover:opacity-100"
+                  onClick={() => onDelete(e.id)}
+                  aria-label={`Remove ${e.title}`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-4 w-4">
+                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
+                      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -799,7 +860,7 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
     net: (totalsByMemberPaid[m.id] || 0) - (totalsByMemberOwed[m.id] || 0)
   }));
 
-  // Simplified settlement suggestion: who owes who — greedy algorithm
+  // Simplified settlement suggestion: who owes who, greedy algorithm
   function settlements() {
     const list = net.map(x => ({ ...x }));
     const debtors = list.filter(x => x.net < -0.005).map(x => ({ ...x, need: -x.net }));
@@ -810,7 +871,7 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
       const d = debtors[i];
       const c = creditors[j];
       const amt = Math.min(d.need, c.can);
-      // Round numerically rather than parsing currency()'s formatted output —
+      // Round numerically rather than parsing currency()'s formatted output,
       // that string carries digit grouping and would parse back as NaN.
       ops.push({ from: d.name, to: c.name, amount: Math.round(amt * 100) / 100 });
       d.need -= amt; c.can -= amt;
@@ -826,15 +887,15 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
   const perHead = activeCount ? totalTrip / activeCount : 0;
 
   return (
-    <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
+    <div className="rounded-2xl border border-rule bg-surface p-5">
       {/* The settlement list is the product: it is the one thing someone opens
           this app to find out. It leads, and everything below it is the
           evidence for it. */}
       <div className="mb-5">
-        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Settle up</div>
+        <h2 className="font-display text-xl tracking-tight">Settle up</h2>
         {settle.length === 0 ? (
-          <div className="mt-2 rounded-xl bg-credit-50 px-4 py-3 text-sm font-medium text-credit-700 ring-1 ring-credit-100">
-            All settled — nobody owes anybody.
+          <div className="mt-2 rounded-xl border border-credit/25 bg-credit-soft px-4 py-3 text-sm font-medium text-credit">
+            All settled. Nobody owes anybody.
           </div>
         ) : (
           <>
@@ -842,53 +903,56 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
               {settle.map((s, idx: number) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200"
+                  className="flex items-center justify-between gap-3 rounded-xl bg-sunken px-4 py-3"
                 >
-                  <span className="flex min-w-0 items-center gap-2 font-medium text-slate-900">
+                  <span className="flex min-w-0 items-center gap-2 font-medium text-ink">
                     <span className="truncate">{s.from}</span>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0 text-slate-400">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0 text-ink-subtle">
                       <path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <span className="truncate">{s.to}</span>
                   </span>
-                  <span className="shrink-0 whitespace-nowrap text-lg font-semibold tnum text-slate-900">
+                  <span className="shrink-0 whitespace-nowrap text-lg font-semibold tnum text-ink">
                     ₹{currency(s.amount)}
                   </span>
                 </div>
               ))}
             </div>
-            <div className="mt-2 text-xs text-slate-500">
-              {settle.length} transfer{settle.length === 1 ? '' : 's'} clears the whole group.
+            <div className="mt-2 text-xs text-ink-subtle">
+              {settle.length === 1 ? 'One transfer clears' : `${settle.length} transfers clear`} the whole group.
             </div>
           </>
         )}
       </div>
 
-      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-slate-100 pt-4">
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-rule pt-4">
         <div>
-          <span className="text-sm text-slate-600">Trip total </span>
-          <span className="text-xl font-semibold tracking-tight tnum">₹{currency(totalTrip)}</span>
+          <span className="text-sm text-ink-muted">Trip total </span>
+          <span className="font-display text-2xl tracking-tight tnum">₹{currency(totalTrip)}</span>
         </div>
-        <div className="text-sm text-slate-500 tnum">₹{currency(perHead)} per head</div>
+        <div className="text-sm text-ink-subtle tnum">₹{currency(perHead)} per head</div>
       </div>
 
       <div className="mb-5">
-        <div className="text-sm font-medium mb-2">Paid vs Owed</div>
-        <div className="grid grid-cols-1 gap-2">
+        <h3 className="mb-2 font-display text-base tracking-tight">Paid vs owed</h3>
+        <div className="divide-y divide-rule border-y border-rule">
           {net.map(n => (
-            <div key={n.id} className="flex items-center justify-between gap-3 rounded-lg p-3 ring-1 ring-slate-200">
+            <div key={n.id} className="flex items-center justify-between gap-3 py-2.5">
               <div className="min-w-0">
                 <div className="font-medium truncate">
                   {n.name}
-                  {n.removed && <span className="ml-2 text-xs font-normal text-slate-500">(removed)</span>}
+                  {n.removed && <span className="ml-2 text-xs font-normal text-ink-subtle">(removed)</span>}
                 </div>
-                <div className="text-sm text-slate-600 tnum">Paid ₹{currency(n.paid)} • Owes ₹{currency(n.owed)}</div>
+                <div className="mt-0.5 flex flex-wrap gap-x-3 text-sm text-ink-subtle tnum">
+                  <span className="whitespace-nowrap">paid ₹{currency(n.paid)}</span>
+                  <span className="whitespace-nowrap">owes ₹{currency(n.owed)}</span>
+                </div>
               </div>
               {/* Direction is carried by the word, not only by colour, so the
                   row still reads correctly without colour vision. */}
-              <div className={`shrink-0 whitespace-nowrap text-right text-sm font-semibold tnum ${n.net>=0 ? 'text-credit-700' : 'text-debit-700'}`}>
-                <span className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  {n.net >= 0 ? 'Receives' : 'Pays'}
+              <div className={`shrink-0 whitespace-nowrap text-right text-sm font-semibold tnum ${n.net>=0 ? 'text-credit' : 'text-debit'}`}>
+                <span className="block text-xs font-normal text-ink-subtle">
+                  {n.net >= 0 ? 'receives' : 'pays'}
                 </span>
                 ₹{currency(Math.abs(n.net))}
               </div>
@@ -898,9 +962,9 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
       </div>
 
       <div>
-        <div className="text-sm font-medium mb-2">Where it went</div>
+        <h3 className="mb-2 font-display text-base tracking-tight">Where it went</h3>
         {Object.keys(categoryTotals).length === 0 ? (
-          <div className="text-sm text-slate-500">No expenses yet</div>
+          <div className="text-sm text-ink-subtle">No expenses yet</div>
         ) : (
           <div className="space-y-2.5">
             {Object.entries(categoryTotals)
@@ -910,16 +974,16 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
                 return (
                   <div key={cat}>
                     <div className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="capitalize text-slate-700">{cat}</span>
-                      <span className="tnum text-slate-600">
+                      <span className="capitalize text-ink">{cat}</span>
+                      <span className="tnum text-ink-muted">
                         ₹{currency(amt)}
-                        <span className="ml-2 text-slate-400">{Math.round(pct)}%</span>
+                        <span className="ml-2 text-ink-subtle">{Math.round(pct)}%</span>
                       </span>
                     </div>
                     {/* Decorative: the figure and share are both stated above,
                         so the bar adds shape rather than information. */}
-                    <div aria-hidden className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-brand-600/80" style={{ width: `${pct}%` }} />
+                    <div aria-hidden className="mt-1 h-1.5 overflow-hidden rounded-full bg-sunken">
+                      <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -939,6 +1003,9 @@ export default function TripExpenseApp() {
   // SheetJS arrives in a lazy 139 kB chunk. On a slow connection the button
   // would sit silent for seconds and get clicked repeatedly.
   const [exportState, setExportState] = useState<'idle' | 'working' | 'failed'>('idle');
+  // The landing page is the entry surface until someone actually starts.
+  const [seenLanding, setSeenLanding] = useLocalState<boolean>('hisaab_seen_landing', false);
+  const [theme, toggleTheme] = useTheme();
 
   const createTrip = (t: Trip) => setTrips((prev: Trip[]) => [t, ...prev]);
   const deleteTrip = (id: string) => setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
@@ -956,7 +1023,7 @@ export default function TripExpenseApp() {
     setPendingRemoval(null);
   };
 
-  // Seed a worked example and open it straight away — the point is to show the
+  // Seed a worked example and open it straight away. The point is to show the
   // settlement output, not to leave another empty trip on the list.
   const loadSample = () => {
     const t = sampleTrip();
@@ -975,29 +1042,41 @@ export default function TripExpenseApp() {
     if (ok) setTrips([]);
   };
 
+  if (!seenLanding && trips.length === 0) {
+    return (
+      <Landing
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onStart={() => { setSeenLanding(true); setShowNew(true); }}
+        onSample={() => { setSeenLanding(true); loadSample(); }}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 p-6 font-sans">
+    <div className="min-h-screen bg-canvas p-6 font-sans">
       <div className="max-w-6xl mx-auto">
         <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold">Trip Expense Manager</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Saved in this browser only — it won't follow you to another device.
+            <h1 className="font-display text-2xl tracking-tight">Hisaab</h1>
+            <p className="text-sm text-ink-subtle mt-1">
+              Saved in this browser only. It will not follow you to another device.
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             {/* Destructive and irreversible, so it stays out of reach of the
                 primary action and only appears when there is data to lose. */}
             {!current && trips.length > 0 && (
               <button
-                className="rounded-lg px-3 py-2 text-sm font-medium text-debit-700/70 transition-colors hover:bg-debit-50 hover:text-debit-700"
+                className="rounded-full px-3 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-debit-soft hover:text-debit"
                 onClick={resetAllData}
               >
                 Reset data
               </button>
             )}
             <button
-              className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
+              className="inline-flex items-center justify-center rounded-full bg-ink px-3.5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
               onClick={() => setShowNew(true)}
             >
               New trip
@@ -1012,27 +1091,20 @@ export default function TripExpenseApp() {
         )}
 
         {!current && trips.length > 0 && (
-          <main className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="space-y-4 md:col-span-2">
-              <div className="rounded-xl bg-white p-5 shadow-card ring-1 ring-slate-200/70">
-                <h3 className="font-semibold mb-3">Your trips</h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {trips.map((t: Trip) => (
-                    <TripCard key={t.id} trip={t} onOpen={openTrip} onDelete={deleteTrip} />
-                  ))}
-                </div>
-              </div>
+          // Trip cards sit on the canvas rather than inside a panel: a card
+          // holding cards is a container standing in for a heading.
+          <main>
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-3">
+              <h2 className="font-display text-xl tracking-tight">Your trips</h2>
+              <p className="text-sm text-ink-subtle tnum">
+                {trips.length} trip{trips.length === 1 ? '' : 's'} · ₹{currency(trips.reduce((s: number, t: Trip) => s + t.expenses.reduce((ss: number, e: Expense) => ss + Number(e.total), 0), 0))} logged
+              </p>
             </div>
-
-            <aside>
-              <div className="rounded-xl bg-white p-5 shadow-card ring-1 ring-slate-200/70">
-                <h3 className="font-semibold mb-3">Quick stats</h3>
-                <div className="text-sm text-slate-700">Trips: {trips.length}</div>
-                <div className="text-sm text-slate-700 tnum">
-                  Total expenses (all trips): ₹{currency(trips.reduce((s: number, t: Trip) => s + t.expenses.reduce((ss: number, e: Expense) => ss + Number(e.total), 0), 0))}
-                </div>
-              </div>
-            </aside>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {trips.map((t: Trip) => (
+                <TripCard key={t.id} trip={t} onOpen={openTrip} onDelete={deleteTrip} />
+              ))}
+            </div>
           </main>
         )}
 
@@ -1040,13 +1112,13 @@ export default function TripExpenseApp() {
           <main className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold">{current.name}</h2>
-                <div className="text-sm text-slate-600">Members: {activeMembers.length} • Expenses: {current.expenses.length}</div>
+                <h2 className="font-display text-2xl tracking-tight">{current.name}</h2>
+                <div className="text-sm text-ink-muted">Members: {activeMembers.length} • Expenses: {current.expenses.length}</div>
               </div>
               <div className="flex gap-2">
-                <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={closeTrip}>Back</button>
+                <button className="inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={closeTrip}>Back</button>
                 <button 
-                  className="inline-flex items-center justify-center rounded-lg bg-debit-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-debit-700" 
+                  className="inline-flex items-center justify-center rounded-full bg-debit px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-debit/88" 
                   onClick={() => { 
                     if (window.confirm('Delete this trip?')) { 
                       deleteTrip(current.id); 
@@ -1093,11 +1165,11 @@ export default function TripExpenseApp() {
                   returns to the right-hand column. */}
               <div className="order-first space-y-4 lg:order-none">
                 <SummaryPanel trip={current} />
-                <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
-                  <h5 className="font-medium mb-2">Actions</h5>
+                <div className="rounded-2xl border border-rule bg-surface p-5">
+                  <h2 className="font-display text-xl tracking-tight mb-3">Actions</h2>
 <div className="space-y-2">
   <button 
-    className="w-full inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" 
+    className="w-full inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
     onClick={() => { 
       // Export to CSV
       const nameOf = (id: string): string => current.members.find((m: Member) => m.id === id)?.name || 'Unknown';
@@ -1134,7 +1206,7 @@ export default function TripExpenseApp() {
     Export CSV
   </button>
   <button 
-    className="w-full inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
+    className="w-full inline-flex items-center justify-center rounded-full border border-rule-strong px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken disabled:cursor-not-allowed disabled:text-ink-subtle disabled:hover:bg-transparent"
     disabled={exportState === 'working'}
     onClick={async () => {
       // SheetJS is bundled, not fetched from a CDN, so export works offline.
@@ -1204,7 +1276,7 @@ export default function TripExpenseApp() {
     {exportState === 'working' ? 'Preparing…' : 'Export XLSX'}
   </button>
   {exportState === 'failed' && (
-    <p role="alert" className="text-sm text-debit-700">
+    <p role="alert" className="text-sm text-debit">
       Could not load the spreadsheet library. Export to CSV instead.
     </p>
   )}

@@ -284,10 +284,17 @@ describe('sampleTrip', () => {
 describe('App', () => {
   beforeEach(() => localStorage.clear());
 
-  it('offers both a real start and a worked example when there are no trips', () => {
+  it('shows the landing page to a first-time visitor', () => {
     render(<App />);
-    expect(screen.getByText('Trip Expense Manager')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /the hisaab is not/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /start a trip/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /worked example/i }).length).toBeGreaterThan(0);
+  });
+
+  it('shows the app itself once the landing page has been passed', () => {
+    localStorage.setItem('hisaab_seen_landing', 'true');
+    render(<App />);
+    expect(screen.getByRole('heading', { name: 'Hisaab' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create your first trip/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /try a sample trip/i })).toBeInTheDocument();
   });
 });

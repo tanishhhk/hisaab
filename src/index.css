@@ -1,33 +1,100 @@
+/* Self-hosted so there is no third-party request at runtime and the app still
+   has a voice offline. wght-only subsets: no italic axis is used anywhere. */
+@import '@fontsource-variable/schibsted-grotesk/wght.css';
+@import '@fontsource-variable/bricolage-grotesque/wght.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* The world: warm paper, ink, a saffron accent, and money in green and red.
+   Colours are RGB triplets so Tailwind can apply opacity to them, and so the
+   dark scheme is a redefinition of ~14 values rather than a dark: variant on
+   every element. */
+:root {
+  --canvas: 251 249 246;
+  --surface: 255 255 255;
+  --sunken: 245 242 237;
+  --ink: 26 24 21;
+  --ink-muted: 91 85 77;
+  --ink-subtle: 111 105 96;
+  --rule: 226 221 212;
+  --rule-strong: 199 192 181;
+  --accent: 180 83 9;
+  --accent-soft: 254 243 224;
+  --credit: 4 120 87;
+  --credit-soft: 236 253 245;
+  --debit: 190 18 60;
+  --debit-soft: 255 241 242;
+}
+
+/* Light is the default regardless of the operating system setting. Dark is
+   opt in, via the toggle, which sets data-theme on the root element. */
+:root[data-theme='dark'] {
+  --canvas: 19 18 17;
+  --surface: 28 26 24;
+  --sunken: 36 33 30;
+  --ink: 244 241 236;
+  --ink-muted: 168 160 150;
+  --ink-subtle: 139 131 119;
+  --rule: 56 52 47;
+  --rule-strong: 78 72 65;
+  --accent: 245 158 11;
+  --accent-soft: 48 34 12;
+  --credit: 52 211 153;
+  --credit-soft: 10 40 31;
+  --debit: 251 113 133;
+  --debit-soft: 47 17 24;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  font-family: 'Schibsted Grotesk Variable', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
-
-/* Money should never reflow as digits change, and a keyboard user has to be
-   able to see where they are. Both are global truths, so they live here
-   rather than being repeated as utilities. */
+/* Money never reflows as digits change. */
 .tnum {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
 }
 
+/* The surfaces the browser draws for us still belong to the design. */
+::selection {
+  background: rgb(var(--accent) / 0.22);
+  color: rgb(var(--ink));
+}
+
+:root {
+  caret-color: rgb(var(--accent));
+  accent-color: rgb(var(--accent));
+  scrollbar-color: rgb(var(--rule-strong)) transparent;
+  scrollbar-width: thin;
+}
+
 :focus-visible {
-  outline: 2px solid #4f46e5;
+  outline: 2px solid rgb(var(--accent));
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--rule-strong));
+  border: 3px solid rgb(var(--canvas));
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--ink-subtle));
 }
 
 @media (prefers-reduced-motion: reduce) {

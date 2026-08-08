@@ -1,0 +1,23 @@
+- generic [ref=f42e4]:
+  - banner [ref=f42e5]:
+    - generic [ref=f42e6]:
+      - heading "Trip Expense Manager" [level=1] [ref=f42e7]
+      - paragraph [ref=f42e8]: Saved in this browser only — it won't follow you to another device.
+    - generic [ref=f42e9]:
+      - button "Reset data" [ref=f42e10] [cursor=pointer]
+      - button "New trip" [ref=f42e11] [cursor=pointer]
+  - main [ref=f42e12]:
+    - generic [ref=f42e13]:
+      - heading "Your trips" [level=2] [ref=f42e14]
+      - paragraph [ref=f42e15]: 1 trip · ₹16,950.00 logged
+    - generic [ref=f42e17]:
+      - generic [ref=f42e18]:
+        - generic [ref=f42e19]:
+          - heading "Indore Weekend (sample)" [level=3] [ref=f42e20]
+          - generic [ref=f42e21]: "Members: 4 • Expenses: 5"
+        - generic [ref=f42e22]:
+          - generic [ref=f42e23]: Total
+          - generic [ref=f42e24]: ₹16,950.00
+      - generic [ref=f42e25]:
+        - button "Open" [ref=f42e26] [cursor=pointer]
+        - button "Delete" [ref=f42e27] [cursor=pointer]
