@@ -70,15 +70,16 @@ function HisaabWord() {
           <motion.span
             key={i}
             aria-hidden
-            className="pointer-events-none absolute font-sans text-[0.2em] font-medium text-accent"
-            style={{ left: `${20 + i * 27}%`, bottom: '0.05em' }}
-            initial={{ opacity: 0, y: 0 }}
-            animate={{ opacity: [0, 0.85, 0], y: ['0em', '-2.2em'] }}
+            className="pointer-events-none absolute z-10 font-sans text-[0.28em] font-semibold text-accent"
+            style={{ left: `${24 + i * 26}%`, top: '-0.15em' }}
+            initial={{ opacity: 0, y: '0.9em' }}
+            animate={{ opacity: [0, 1, 1, 0], y: ['0.9em', '-0.5em'] }}
             transition={{
-              duration: 2.8,
-              delay: 1.6 + i * 0.55,
+              duration: 2.4,
+              times: [0, 0.25, 0.6, 1],
+              delay: 1.3 + i * 0.45,
               repeat: Infinity,
-              repeatDelay: 2.4,
+              repeatDelay: 1.8,
               ease: 'easeOut',
             }}
           >
@@ -86,6 +87,267 @@ function HisaabWord() {
           </motion.span>
         ))}
     </span>
+  );
+}
+
+
+// The hero's other half: the hisaab actually being kept. Entries land one at a
+// time onto ruled lines and the total climbs with them, ending at the same
+// 16,950 the settlement later resolves. The recording and the reckoning are
+// the same trip, seen twice.
+const LEDGER: { what: string; who: string; amount: number }[] = [
+  { what: 'Hotel, two nights', who: 'Rohan', amount: 8600 },
+  { what: 'Sarafa street food', who: 'Asha', amount: 2400 },
+  { what: 'Cab to Mandu', who: 'Chetan', amount: 3500 },
+  { what: 'Petrol', who: 'Asha', amount: 1000 },
+  { what: '56 Dukan breakfast', who: 'Divya', amount: 1450 },
+];
+
+const inr = (n: number) =>
+  n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function LedgerStrip({ reduce }: { reduce: boolean }) {
+  const [shown, setShown] = React.useState(reduce ? LEDGER.length : 0);
+
+  React.useEffect(() => {
+    if (reduce) return;
+    if (shown >= LEDGER.length) return;
+    const t = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 900 : 620);
+    return () => clearTimeout(t);
+  }, [shown, reduce]);
+
+  const running = LEDGER.slice(0, shown).reduce((a, b) => a + b.amount, 0);
+
+  return (
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+      className="relative rounded-2xl border border-rule bg-surface/80 p-6 backdrop-blur-[2px]"
+      aria-hidden
+    >
+      <span className="pointer-events-none absolute -right-2 -top-3 rotate-[9deg] rounded-md border border-accent/50 bg-canvas px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        sample
+      </span>
+      <div className="flex items-baseline justify-between gap-4 border-b border-rule pb-3">
+        <span className="font-display text-lg tracking-tight">Indore, three nights</span>
+        <span className="text-sm text-ink-subtle">4 people</span>
+      </div>
+
+      <ul className="mt-1">
+        {LEDGER.map((row, i) => (
+          <li
+            key={row.what}
+            className={`flex items-baseline justify-between gap-4 border-b border-rule py-2.5 transition-all duration-500 ${
+              i < shown ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0'
+            }`}
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-[0.95rem]">{row.what}</span>
+              <span className="text-xs text-ink-subtle">{row.who} paid</span>
+            </span>
+            <span className="shrink-0 tnum text-[0.95rem]">&#8377;{inr(row.amount)}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="flex items-baseline justify-between gap-4 pt-4">
+        <span className="text-sm text-ink-muted">Running total</span>
+        <span className="font-display text-3xl tracking-tight tnum">&#8377;{inr(running)}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+
+// Replace the href values with your own. Kept in one place so there is exactly
+// one line to edit per account.
+
+const SOCIAL_ICONS: Record<string, React.ReactNode> = {
+  GitHub: (
+    <path
+      fill="currentColor"
+      d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48 0-.24-.01-.87-.01-1.7-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.18.58.69.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10Z"
+    />
+  ),
+  Instagram: (
+    <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="5.2" />
+      <circle cx="12" cy="12" r="3.9" />
+      <circle cx="17.2" cy="6.8" r="1.05" fill="currentColor" stroke="none" />
+    </g>
+  ),
+  LinkedIn: (
+    <path
+      fill="currentColor"
+      d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM3 9h4v12H3V9Zm6 0h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.4c0-1.29-.02-2.95-1.8-2.95-1.8 0-2.08 1.4-2.08 2.85V21H9V9Z"
+    />
+  ),
+};
+
+const SOCIALS: { label: string; href: string; caption: string }[] = [
+  { label: 'GitHub', href: 'https://github.com/tanishhhk', caption: 'every bug, publicly, forever' },
+  { label: 'Instagram', href: 'https://instagram.com/', caption: 'mostly food I did not split fairly' },
+  { label: 'LinkedIn', href: 'https://www.linkedin.com/', caption: 'the one wearing a collar' },
+];
+
+// A caption that rises on hover and on keyboard focus, so it is reachable
+// without a mouse.
+function SocialLink({ label, href, caption }: { label: string; href: string; caption: string }) {
+  return (
+    <span className="group relative inline-block">
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-[15rem] -translate-x-1/2 translate-y-1 rounded-full border border-rule bg-ink px-3 py-1.5 text-xs font-medium text-canvas opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+      >
+        {caption}
+      </span>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="inline-flex items-center gap-2 rounded-full border border-rule-strong px-4 py-2 text-sm font-medium transition-colors hover:bg-sunken"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden className="h-[17px] w-[17px]">
+          {SOCIAL_ICONS[label]}
+        </svg>
+        {label}
+      </a>
+    </span>
+  );
+}
+
+const FEEDBACK_TO = 'tanishkjain3011@gmail.com';
+
+// No backend needed: the note is handed to the visitor's own mail app with the
+// subject and body already written. Nothing is stored, nothing is tracked, and
+// it works the moment the page is deployed.
+function Feedback() {
+  const [note, setNote] = React.useState('');
+  const [sent, setSent] = React.useState(false);
+
+  const send = () => {
+    const body = note.trim();
+    if (!body) return;
+    window.location.href =
+      `mailto:${FEEDBACK_TO}` +
+      `?subject=${encodeURIComponent('Hisaab feedback')}` +
+      `&body=${encodeURIComponent(body)}`;
+    setSent(true);
+  };
+
+  return (
+    <div className="rounded-2xl border border-rule bg-surface p-6">
+      <h3 className="font-display text-xl tracking-tight">Tell me what broke</h3>
+      <p className="mt-1.5 text-sm text-ink-muted">
+        Or what you wish it did. It goes straight to my inbox, and I read all of
+        it.
+      </p>
+
+      {sent ? (
+        <p className="mt-5 rounded-xl border border-credit/25 bg-credit-soft px-4 py-3 text-sm font-medium text-credit">
+          Your mail app should be open. Thank you, genuinely.
+        </p>
+      ) : (
+        <>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={4}
+            placeholder="The split for the auto rickshaw came out wrong when..."
+            className="mt-5 w-full resize-none rounded-2xl border border-rule bg-canvas p-3.5 text-sm transition focus:border-accent"
+          />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-xs text-ink-subtle">Opens your mail app</span>
+            <button
+              onClick={send}
+              disabled={!note.trim()}
+              className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88 disabled:opacity-40"
+            >
+              Send it
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+// The band was telling people to install without offering to do it. Chrome and
+// Edge fire beforeinstallprompt when the app qualifies; we hold that event and
+// spend it on a real button. iOS Safari never fires it, so that case falls back
+// to naming the actual gesture rather than pretending a button exists.
+function InstallBand() {
+  const [prompt, setPrompt] = React.useState<any>(null);
+  const [installed, setInstalled] = React.useState(false);
+
+  React.useEffect(() => {
+    const onPrompt = (e: Event) => { e.preventDefault(); setPrompt(e); };
+    const onInstalled = () => { setInstalled(true); setPrompt(null); };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  return (
+    <section className="border-y border-rule bg-sunken">
+      <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 lg:grid-cols-[auto_1fr_auto]">
+        {/* The mark that will actually sit on their home screen. */}
+        <div className="flex items-center gap-4">
+          <span className="grid h-16 w-16 shrink-0 place-items-center rounded-[1.15rem] bg-ink">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-8 w-8 text-canvas">
+              <path d="M4 12h13M13 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="font-display text-2xl tracking-tighter lg:hidden">Hisaab</span>
+        </div>
+
+        <div>
+          <p className="max-w-[34ch] font-display text-[clamp(1.5rem,2.6vw,2.1rem)] leading-[1.15] tracking-tight">
+            Expressive millennial or nonchalant Gen Z, the hisaab comes for
+            everyone.
+          </p>
+          <p className="mt-3 max-w-[52ch] text-ink-muted">
+            Keep it on your home screen. It opens with no signal, so it still
+            works on the bus back.
+          </p>
+        </div>
+
+        <div className="shrink-0">
+          {installed ? (
+            <span className="inline-flex items-center gap-2 rounded-full border border-credit/30 bg-credit-soft px-5 py-3 text-sm font-medium text-credit">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-4 w-4">
+                <path d="M4 12.5 9 17.5 20 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Already on your home screen
+            </span>
+          ) : prompt ? (
+            <button
+              onClick={async () => { prompt.prompt(); await prompt.userChoice; setPrompt(null); }}
+              className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 font-medium text-canvas transition-colors hover:bg-ink/88"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-[18px] w-[18px]">
+                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Add to home screen
+            </button>
+          ) : (
+            <p className="max-w-[19ch] text-sm text-ink-subtle">
+              {isIOS
+                ? 'On iPhone: tap Share, then Add to Home Screen.'
+                : 'Use your browser menu, then Install or Add to Home Screen.'}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -138,7 +400,7 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
   const still = reduce ? {} : undefined;
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="ledger-ground min-h-screen bg-canvas text-ink">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <Wordmark />
         <div className="flex items-center gap-2">
@@ -154,12 +416,13 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
 
       {/* Hero. The question is the headline because it is the sentence every
           group actually sends. */}
-      <section className="mx-auto max-w-6xl px-6 pb-10 pt-8 sm:pt-12">
+      <section className="mx-auto grid max-w-6xl gap-12 px-6 pb-28 pt-8 sm:pt-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pb-40">
+        <div>
         <motion.h1
           initial={reduce ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="max-w-[15ch] font-display text-[clamp(2.5rem,8vw,5.5rem)] font-semibold leading-[0.95] tracking-tighter"
+          className="font-display text-[clamp(2.35rem,5.6vw,4.5rem)] font-semibold leading-[0.98] tracking-tighter [text-wrap:balance]"
         >
           The trip is over.
           <br />
@@ -199,10 +462,13 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
         <p className="mt-4 text-sm text-ink-subtle">
           No account needed. Nothing leaves your browser.
         </p>
+        </div>
+
+        <LedgerStrip reduce={!!reduce} />
       </section>
 
       {/* The turn. One long scroll in which the mess is replaced by the answer. */}
-      <section ref={turnRef} className="relative h-[190vh]">
+      <section ref={turnRef} className="relative h-[200vh]">
         <div className="sticky top-0 flex h-screen items-center overflow-hidden">
           <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-2 lg:items-center">
             <div>
@@ -222,10 +488,10 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
               </motion.p>
             </div>
 
-            <div className="relative h-[62vh] min-h-[420px]">
+            <div className="relative grid h-[58vh] min-h-[400px] place-items-center">
               <motion.div
                 style={still ?? { y: chatY, opacity: chatOpacity, filter: chatBlur }}
-                className="absolute inset-0 space-y-2 overflow-hidden pr-1"
+                className="col-start-1 row-start-1 w-full space-y-2 self-center overflow-hidden"
                 aria-hidden
               >
                 {CHAT.map((c, i) => (
@@ -235,27 +501,29 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
 
               <motion.div
                 style={still ?? { opacity: answerOpacity, y: answerY, scale: answerScale }}
-                className="absolute inset-x-0 top-1/2 -translate-y-1/2"
+                className="col-start-1 row-start-1 w-full self-center"
               >
                 <div className="rounded-2xl border border-rule bg-surface p-6">
-                  <div className="divide-y divide-rule">
-                    {SETTLEMENT.map((s) => (
-                      <div key={s.from} className="flex items-center justify-between gap-4 py-4">
+                  <p className="text-sm text-ink-muted">Everyone settles with one payment.</p>
+                  <div className="mt-3 divide-y divide-rule">
+                    {SETTLEMENT.map((s2) => (
+                      <div key={s2.from} className="flex items-center justify-between gap-4 py-3.5">
                         <span className="flex min-w-0 items-center gap-2.5 font-medium">
-                          <span className="truncate">{s.from}</span>
+                          <span className="truncate">{s2.from}</span>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0 text-ink-subtle">
                             <path d="M3 12h16M14 6l6 6-6 6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
-                          <span className="truncate">{s.to}</span>
+                          <span className="truncate">{s2.to}</span>
                         </span>
                         <span className="shrink-0 font-display text-xl font-semibold tnum tracking-tight">
-                          ₹{s.amount}
+                          &#8377;{s2.amount}
                         </span>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-4 text-sm text-ink-subtle">
-                    Four people, five expenses, ₹16,950, settled in three transfers.
+                  <p className="mt-4 border-t border-rule pt-4 text-[0.95rem] leading-relaxed text-ink">
+                    Four people, five expenses, <span className="font-semibold tnum">&#8377;16,950</span>,
+                    settled in <span className="font-semibold">three transfers</span>.
                   </p>
                 </div>
               </motion.div>
@@ -268,12 +536,12 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
           the arithmetic shown rather than asserted. */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <h2 className="max-w-[18ch] font-display text-[clamp(1.75rem,4vw,2.75rem)] font-semibold leading-[1.05] tracking-tighter">
-          Built to be exactly right about money.
+          Three ate the biryani. Two did not.
         </h2>
         <p className="mt-5 max-w-[52ch] text-lg text-ink-muted">
-          Not everything divides by the number of people at the table. Three had
-          the biryani, two ate vegetarian, and the tax belongs to whoever ordered
-          what. Hisaab lets you say so.
+          Not everything divides by the number of people at the table. The two
+          who ate vegetarian pay for what they ordered, the tax follows the food
+          rather than the headcount, and each group splits its own total.
         </p>
 
         <motion.div
@@ -283,54 +551,68 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="mt-12 overflow-hidden rounded-2xl border border-rule bg-surface"
         >
-          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-rule px-6 py-5">
-            <h3 className="font-display text-xl tracking-tight">Dinner, five people</h3>
-            <span className="tnum text-ink-muted">&#8377;2,205.00 on the bill</span>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-rule px-6 py-5 sm:px-8">
+            <h3 className="font-display text-xl tracking-tight">One dinner bill</h3>
+            <span className="tnum text-ink-muted">
+              &#8377;2,100.00 of food plus &#8377;105.00 tax
+            </span>
           </div>
 
-          <div className="grid divide-y divide-rule sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          {/* Each row reads as one sentence of arithmetic: what the group
+              ordered, its tax, divided by how many of them there were. */}
+          <div className="divide-y divide-rule">
             {[
               {
                 who: 'Asha and Divya',
-                note: 'ate vegetarian',
+                ate: 'ate vegetarian',
                 food: '900.00',
                 tax: '45.00',
+                sum: '945.00',
+                by: 2,
                 each: '472.50',
-                count: 'each, split two ways',
               },
               {
                 who: 'Rohan, Bilal and Chetan',
-                note: 'ordered the biryani and the fish',
+                ate: 'had the biryani and the fish',
                 food: '1,200.00',
                 tax: '60.00',
+                sum: '1,260.00',
+                by: 3,
                 each: '420.00',
-                count: 'each, split three ways',
               },
             ].map((g) => (
-              <div key={g.who} className="px-6 py-6">
-                <div className="font-medium">{g.who}</div>
-                <div className="text-sm text-ink-subtle">{g.note}</div>
-                <dl className="mt-4 space-y-1.5 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-ink-muted">What they ordered</dt>
-                    <dd className="tnum">&#8377;{g.food}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-ink-muted">Their share of tax</dt>
-                    <dd className="tnum">&#8377;{g.tax}</dd>
-                  </div>
-                </dl>
-                <div className="mt-4 flex items-baseline justify-between gap-4 border-t border-rule pt-4">
-                  <span className="text-sm text-ink-muted">{g.count}</span>
-                  <span className="font-display text-2xl tracking-tight tnum">&#8377;{g.each}</span>
+              <div key={g.who} className="px-6 py-6 sm:px-8">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{g.who}</span>
+                  <span className="text-sm text-ink-subtle">{g.ate}</span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 tnum text-[0.95rem]">
+                  <span className="rounded-full bg-sunken px-3 py-1.5">
+                    &#8377;{g.food} <span className="text-ink-subtle">of food</span>
+                  </span>
+                  <span className="text-ink-subtle">+</span>
+                  <span className="rounded-full bg-sunken px-3 py-1.5">
+                    &#8377;{g.tax} <span className="text-ink-subtle">tax</span>
+                  </span>
+                  <span className="text-ink-subtle">=</span>
+                  <span className="rounded-full bg-sunken px-3 py-1.5">&#8377;{g.sum}</span>
+                  <span className="text-ink-subtle">shared by {g.by}</span>
+                  <span className="text-ink-subtle">=</span>
+                  <span className="font-display text-2xl tracking-tight text-ink">
+                    &#8377;{g.each}
+                  </span>
+                  <span className="text-ink-subtle">each</span>
                 </div>
               </div>
             ))}
           </div>
 
-          <p className="border-t border-rule bg-sunken px-6 py-4 text-sm text-ink-muted tnum">
-            2 &#215; &#8377;472.50 plus 3 &#215; &#8377;420.00 is &#8377;2,205.00. The parts always add back
-            up to the bill.
+          <p className="border-t border-rule bg-sunken px-6 py-4 text-sm text-ink-muted sm:px-8">
+            <span className="tnum">
+              Two at &#8377;472.50 and three at &#8377;420.00 comes to &#8377;2,205.00.
+            </span>{' '}
+            Exactly the bill. Nobody subsidised the biryani.
           </p>
         </motion.div>
 
@@ -357,18 +639,45 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
         </div>
       </section>
 
+      <InstallBand />
+
       <section className="border-t border-rule">
         <div className="mx-auto max-w-6xl px-6 py-24 text-center">
           <h2 className="mx-auto max-w-[16ch] font-display text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-[1.02] tracking-tighter">
             Settle the trip before you unpack.
           </h2>
+
         </div>
       </section>
 
       <footer className="border-t border-rule">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-8 text-sm text-ink-subtle">
-          <Wordmark />
-          <span>Settle up, to the last paisa.</span>
+        <div className="mx-auto grid max-w-6xl gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
+          <div>
+            <h2 className="max-w-[20ch] font-display text-[clamp(1.5rem,3vw,2.1rem)] leading-[1.1] tracking-tighter">
+              Built by someone who was tired of being the one with the calculator.
+            </h2>
+            <p className="mt-4 max-w-[46ch] text-ink-muted">
+              Hisaab exists because a weekend in Indore ended in a group chat
+              that ran to forty messages and still got the maths wrong. It is
+              free, it has no adverts, and it will never ask who you had dinner
+              with. If it saves you one argument, it has paid for itself.
+            </p>
+
+            <div className="mt-7 flex flex-wrap items-center gap-2">
+              {SOCIALS.map((link) => (
+                <SocialLink key={link.label} {...link} />
+              ))}
+            </div>
+          </div>
+
+          <Feedback />
+        </div>
+
+        <div className="border-t border-rule">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-sm text-ink-subtle">
+            <Wordmark />
+            <span>Settle up, to the last paisa.</span>
+          </div>
         </div>
       </footer>
     </div>

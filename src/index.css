@@ -107,3 +107,50 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* The page is a ledger page. Horizontal ruling at a fixed rhythm plus one
+   vertical margin rule, which is what every account book and school notebook
+   in India actually has. Held at roughly four percent contrast so it reads as
+   paper rather than as a grid, and faded out down the page so it never fights
+   the content. */
+.ledger-ground {
+  position: relative;
+  isolation: isolate;
+}
+
+.ledger-ground::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2.25rem,
+      rgb(var(--ink) / 0.045) 2.25rem,
+      rgb(var(--ink) / 0.045) calc(2.25rem + 1px)
+    );
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 34%, transparent 78%);
+  mask-image: linear-gradient(to bottom, black 0%, black 34%, transparent 78%);
+}
+
+/* The margin rule, in the accent, exactly where a ledger would carry it. */
+.ledger-ground::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: max(1.5rem, calc(50vw - 34rem));
+  width: 1px;
+  z-index: -1;
+  pointer-events: none;
+  background: rgb(var(--accent) / 0.16);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 82%);
+  mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 82%);
+}
+
+@media (max-width: 640px) {
+  .ledger-ground::after { display: none; }
+}
