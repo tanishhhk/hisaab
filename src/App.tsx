@@ -191,6 +191,53 @@ export function applyRemoval(trip: Trip, memberId: string, mode: RemovalMode): T
   return { ...trip, members, expenses };
 }
 
+export interface ExpenseDraft {
+  title: string;
+  total: string;
+  method: 'equal' | 'unequal';
+  selected: string[];
+  customSplits: Record<string, string>;
+  members: Member[];
+}
+
+export type ExpenseErrors = Partial<Record<'title' | 'total' | 'participants' | 'splits', string>>;
+
+// Validation is pure and separate from the form so it can be tested directly
+// and reused by an edit flow. Returns every problem at once rather than
+// stopping at the first, so the user fixes one round instead of three.
+export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; splits: Split[] } {
+  const errors: ExpenseErrors = {};
+  if (!d.title.trim()) errors.title = 'Give this expense a name.';
+
+  const amount = Number(d.total);
+  if (!d.total.trim()) errors.total = 'Enter an amount.';
+  else if (!Number.isFinite(amount)) errors.total = 'That is not a number.';
+  else if (amount <= 0) errors.total = 'Amount must be more than zero.';
+
+  let splits: Split[] = [];
+  if (d.method === 'equal') {
+    const targets = d.selected.filter((id: string) => d.members.some((m: Member) => m.id === id));
+    if (targets.length === 0) errors.participants = 'Pick at least one person to split between.';
+    else if (Number.isFinite(amount) && amount > 0) splits = allocateEqually(amount, targets);
+  } else {
+    const entries: Split[] = d.members
+      .map((m: Member) => ({ memberId: m.id, amount: Number(d.customSplits[m.id] || 0) }))
+      .filter((e: Split) => Number.isFinite(e.amount) && e.amount > 0);
+    const sum = entries.reduce((s: number, e: Split) => s + e.amount, 0);
+    if (entries.length === 0) {
+      errors.splits = 'Enter at least one amount.';
+    } else if (Number.isFinite(amount) && Math.abs(sum - amount) > 0.01) {
+      const diff = amount - sum;
+      errors.splits = diff > 0
+        ? `₹${currency(diff)} short of the total.`
+        : `₹${currency(-diff)} over the total.`;
+    } else {
+      splits = entries;
+    }
+  }
+  return { errors, splits };
+}
+
 // A realistic trip so a first-time visitor can see the settlement maths work
 // on real numbers instead of staring at an empty screen. Built through
 // allocateEqually so the sample obeys the same rules as anything they enter.
@@ -300,80 +347,150 @@ function useLocalState<T>(key: string, initial: T): [T, React.Dispatch<React.Set
   return [state, setState];
 }
 
+// role="alert" so a screen reader announces the problem when it appears,
+// rather than the user discovering it only on the next tab stop.
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="mt-1.5 text-sm text-debit-700">
+      {message}
+    </p>
+  );
+}
+
+// Both dialogs were missing Escape, click-outside and focus containment. One
+// shell so those behaviours exist once and cannot drift apart.
+function Modal({ onClose, labelledBy, width, children }: {
+  onClose: () => void;
+  labelledBy: string;
+  width: string;
+  children: React.ReactNode;
+}) {
+  const panel = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusables = () => Array.from(
+      panel.current?.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    ).filter((el) => !el.hasAttribute('disabled'));
+
+    focusables()[0]?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        className={`w-full ${width} rounded-2xl bg-white p-6 shadow-lift animate-rise`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
   const [name, setName] = useState<string>('');
+  const [error, setError] = useState<string>('');
+
   const create = () => {
-    if (!name.trim()) return alert('Enter trip name');
+    if (!name.trim()) return setError('Give the trip a name.');
     onCreate({ id: uid('t_'), name: name.trim(), members: [], expenses: [] });
     onClose();
   };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lift animate-rise">
-        <h3 className="text-lg font-semibold mb-3">Create new trip</h3>
-        <input 
-          className="w-full rounded-lg border-slate-300 bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600 mb-4" 
-          value={name} 
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} 
-          placeholder="Trip name" 
-        />
-        <div className="flex gap-2 justify-end">
-          <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={onClose}>Cancel</button>
-          <button className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700" onClick={create}>Create</button>
-        </div>
+    <Modal onClose={onClose} labelledBy="new-trip-title" width="max-w-md">
+      <h3 id="new-trip-title" className="text-lg font-semibold mb-3">Create new trip</h3>
+      <input
+        className={`w-full rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset transition focus:ring-2 ${error ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
+        value={name}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setName(e.target.value); if (error) setError(''); }}
+        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') create(); }}
+        placeholder="Trip name"
+        aria-invalid={!!error}
+        aria-describedby={error ? 'new-trip-error' : undefined}
+      />
+      <FieldError id="new-trip-error" message={error} />
+      <div className="mt-4 flex gap-2 justify-end">
+        <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={onClose}>Cancel</button>
+        <button className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-700" onClick={create}>Create</button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberModalProps) {
   const impact = removalImpact(trip, member.id);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lift animate-rise">
-        <h3 className="text-lg font-semibold mb-1">Remove {member.name}?</h3>
-        <div className="text-sm text-slate-600 mb-4">
-          {impact.involvedCount === 0
-            ? 'They are not part of any expense yet.'
-            : `They are a participant in ${impact.involvedCount} expense${impact.involvedCount === 1 ? '' : 's'}.`}
-          {impact.paidCount > 0 &&
-            ` They also paid for ${impact.paidCount} expense${impact.paidCount === 1 ? '' : 's'} — those payments stay in the summary either way.`}
-        </div>
-
-        <div className="space-y-3">
-          <button
-            className="w-full rounded-xl p-4 text-left ring-1 ring-slate-200 transition-colors hover:bg-brand-50 hover:ring-brand-200"
-            onClick={() => onConfirm('redistribute')}
-          >
-            <div className="font-medium">Remove and split their share</div>
-            <div className="text-sm text-slate-600 mt-1">
-              {impact.redistributableCount > 0
-                ? `Their share of ${impact.redistributableCount} equally-split expense${impact.redistributableCount === 1 ? '' : 's'} is divided across the remaining participants.`
-                : 'No equally-split expenses to redistribute.'}
-              {impact.customCount > 0 &&
-                ` ${impact.customCount} custom-split expense${impact.customCount === 1 ? ' is' : 's are'} left untouched.`}
-              {impact.soleCount > 0 &&
-                ` ${impact.soleCount} expense${impact.soleCount === 1 ? ' where they were' : 's where they were'} the only participant stay${impact.soleCount === 1 ? 's' : ''} as recorded.`}
-            </div>
-          </button>
-
-          <button
-            className="w-full rounded-xl p-4 text-left ring-1 ring-slate-200 transition-colors hover:bg-brand-50 hover:ring-brand-200"
-            onClick={() => onConfirm('keep')}
-          >
-            <div className="font-medium">Remove from future expenses only</div>
-            <div className="text-sm text-slate-600 mt-1">
-              Every existing expense stays exactly as recorded. {member.name} just stops
-              being offered when you add new ones.
-            </div>
-          </button>
-        </div>
-
-        <div className="flex justify-end mt-4">
-          <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={onClose}>Cancel</button>
-        </div>
+    <Modal onClose={onClose} labelledBy="remove-member-title" width="max-w-lg">
+      <h3 id="remove-member-title" className="text-lg font-semibold mb-1">Remove {member.name}?</h3>
+      <div className="text-sm text-slate-600 mb-4">
+        {impact.involvedCount === 0
+          ? 'They are not part of any expense yet.'
+          : `They are a participant in ${impact.involvedCount} expense${impact.involvedCount === 1 ? '' : 's'}.`}
+        {impact.paidCount > 0 &&
+          ` They also paid for ${impact.paidCount} expense${impact.paidCount === 1 ? '' : 's'} — those payments stay in the summary either way.`}
       </div>
-    </div>
+
+      <div className="space-y-3">
+        <button
+          className="w-full rounded-xl p-4 text-left ring-1 ring-slate-200 transition-colors hover:bg-brand-50 hover:ring-brand-200"
+          onClick={() => onConfirm('redistribute')}
+        >
+          <div className="font-medium">Remove and split their share</div>
+          <div className="text-sm text-slate-600 mt-1">
+            {impact.redistributableCount > 0
+              ? `Their share of ${impact.redistributableCount} equally-split expense${impact.redistributableCount === 1 ? '' : 's'} is divided across the remaining participants.`
+              : 'No equally-split expenses to redistribute.'}
+            {impact.customCount > 0 &&
+              ` ${impact.customCount} custom-split expense${impact.customCount === 1 ? ' is' : 's are'} left untouched.`}
+            {impact.soleCount > 0 &&
+              ` ${impact.soleCount} expense${impact.soleCount === 1 ? ' where they were' : 's where they were'} the only participant stay${impact.soleCount === 1 ? 's' : ''} as recorded.`}
+          </div>
+        </button>
+
+        <button
+          className="w-full rounded-xl p-4 text-left ring-1 ring-slate-200 transition-colors hover:bg-brand-50 hover:ring-brand-200"
+          onClick={() => onConfirm('keep')}
+        >
+          <div className="font-medium">Remove from future expenses only</div>
+          <div className="text-sm text-slate-600 mt-1">
+            Every existing expense stays exactly as recorded. {member.name} just stops
+            being offered when you add new ones.
+          </div>
+        </button>
+      </div>
+
+      <div className="flex justify-end mt-4">
+      <button className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" onClick={onClose}>Cancel</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -444,6 +561,12 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
   const [method, setMethod] = useState<'equal' | 'unequal'>('equal');
   const [selected, setSelected] = useState<string[]>(() => members.map((m: Member) => m.id));
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<ExpenseErrors>({});
+
+  // Errors are raised on submit, then cleared as the user addresses them, so
+  // the form never nags about a field they are still filling in.
+  const clearError = (k: keyof ExpenseErrors) =>
+    setErrors((prev: ExpenseErrors) => (prev[k] ? { ...prev, [k]: undefined } : prev));
 
   // Key on the member IDs, not the array identity: the parent rebuilds
   // `members` on every render, so depending on [members] re-ran this (and wiped
@@ -479,36 +602,20 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
   };
 
   const submit = () => {
-    if (!title.trim()) return alert('Title required');
-    const t = Number(total);
-    if (!t || t <= 0) return alert('Enter valid total');
-    let splits: Split[] = [];
-    if (method === 'equal') {
-      // Only split across members who still exist; an empty selection is a
-      // mistake, not a reason to record an expense nobody owes.
-      const targets = selected.filter((id: string) => members.some((m: Member) => m.id === id));
-      if (targets.length === 0) return alert('Select at least one participant');
-      splits = allocateEqually(t, targets);
-    } else {
-      // unequal: customSplits must add up to total. Drive off the current
-      // member list so amounts typed for since-removed members can't leak in.
-      const entries: Split[] = members
-        .map((m: Member) => ({ memberId: m.id, amount: Number(customSplits[m.id] || 0) }))
-        .filter((e: Split) => Number.isFinite(e.amount) && e.amount > 0);
-      const sum = entries.reduce((s: number, e: Split) => s + e.amount, 0);
-      if (Math.abs(sum - t) > 0.01) return alert(`Custom splits must add up to total (current ${currency(sum)})`);
-      if (entries.length === 0) return alert('Enter at least one split amount');
-      splits = entries;
-    }
+    const { errors: found, splits } = validateExpense({
+      title, total, method, selected, customSplits, members,
+    });
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
 
-    onAdd({ 
-      id: uid('e_'), 
-      title: title.trim(), 
-      payerId, 
-      total: Number(t), 
-      splits, 
-      category, 
-      date: new Date().toISOString() 
+    onAdd({
+      id: uid('e_'),
+      title: title.trim(),
+      payerId,
+      total: Number(total),
+      splits,
+      category,
+      date: new Date().toISOString()
     });
     // reset
     setTitle('');
@@ -516,17 +623,22 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
     setSelected(members.map((m: Member) => m.id));
     setCustomSplits({});
     setMethod('equal');
+    setErrors({});
   };
 
   return (
     <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
       <h5 className="font-medium mb-2">Add expense</h5>
-      <input 
-        value={title} 
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)} 
-        placeholder="Expense title" 
-        className="w-full rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600 mb-2" 
+      <input
+        value={title}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTitle(e.target.value); clearError('title'); }}
+        placeholder="Expense title"
+        aria-invalid={!!errors.title}
+        aria-describedby={errors.title ? 'expense-title-error' : undefined}
+        className={`w-full rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset transition focus:ring-2 ${errors.title ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
       />
+      <FieldError id="expense-title-error" message={errors.title} />
+      <div className="mb-2" />
       <div className="flex gap-2 mb-2">
         <select 
           value={payerId} 
@@ -535,11 +647,14 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         >
           {members.map((m: Member) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
-        <input 
-          value={total} 
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTotal(e.target.value)} 
-          placeholder="Total" 
-          className="w-28 rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600" 
+        <input
+          value={total}
+          inputMode="decimal"
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTotal(e.target.value); clearError('total'); }}
+          placeholder="Total"
+          aria-invalid={!!errors.total}
+          aria-describedby={errors.total ? 'expense-total-error' : undefined}
+          className={`w-28 rounded-lg bg-white p-2.5 text-sm tnum ring-1 ring-inset transition focus:ring-2 ${errors.total ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
         />
         <select 
           value={category} 
@@ -549,6 +664,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
           {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <FieldError id="expense-total-error" message={errors.total} />
 
       <div className="mb-2">
         <div className="text-sm mb-1">Split method</div>
@@ -576,15 +692,16 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         <div className="text-sm mb-1">Participants</div>
         <div className="flex flex-wrap gap-2">
           {members.map((m: Member) => (
-            <label key={m.id} className={`px-2 py-1 border rounded ${selected.includes(m.id) ? 'bg-slate-100' : ''}`}>
-              <input 
-                type="checkbox" 
-                checked={selected.includes(m.id)} 
-                onChange={() => toggleSelected(m.id)} 
+            <label key={m.id} className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-sm ring-1 transition-colors ${selected.includes(m.id) ? 'bg-brand-50 ring-brand-200' : 'ring-slate-300 hover:bg-slate-50'}`}>
+              <input
+                type="checkbox"
+                checked={selected.includes(m.id)}
+                onChange={() => { toggleSelected(m.id); clearError('participants'); }}
               /> {m.name}
             </label>
           ))}
         </div>
+        <FieldError id="expense-participants-error" message={errors.participants} />
       </div>
 
       {method === 'unequal' && (
@@ -594,22 +711,24 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
             {members.map((m: Member) => (
               <div key={m.id} className="flex gap-2 items-center">
                 <div className="w-28 text-sm">{m.name}</div>
-                <input 
-                  className="flex-1 rounded-lg bg-white p-2.5 text-sm ring-1 ring-inset ring-slate-300 transition focus:ring-2 focus:ring-brand-600" 
-                  value={customSplits[m.id] ?? ''} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomSplits(prev => ({ ...prev, [m.id]: e.target.value }))} 
-                  placeholder="0" 
+                <input
+                  inputMode="decimal"
+                  className={`flex-1 rounded-lg bg-white p-2.5 text-sm tnum ring-1 ring-inset transition focus:ring-2 ${errors.splits ? 'ring-debit-600 focus:ring-debit-600' : 'ring-slate-300 focus:ring-brand-600'}`}
+                  value={customSplits[m.id] ?? ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setCustomSplits(prev => ({ ...prev, [m.id]: e.target.value })); clearError('splits'); }}
+                  placeholder="0"
                 />
               </div>
             ))}
           </div>
+          <FieldError id="expense-splits-error" message={errors.splits} />
         </div>
       )}
 
       <div className="flex gap-2 justify-end">
         <button 
           className="inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" 
-          onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); }}
+          onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); setErrors({}); }}
         >
           Reset
         </button>
@@ -708,14 +827,52 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
 
   return (
     <div className="rounded-xl bg-white p-4 shadow-card ring-1 ring-slate-200/70">
-      <h5 className="font-medium mb-2">Summary</h5>
-      <div className="mb-3">
-        <div className="text-sm text-slate-600">Trip total</div>
-        <div className="text-3xl font-semibold tracking-tight tnum">₹{currency(totalTrip)}</div>
-        <div className="mt-1 text-sm text-slate-600 tnum">Per head (if shared equally): ₹{currency(perHead)}</div>
+      {/* The settlement list is the product: it is the one thing someone opens
+          this app to find out. It leads, and everything below it is the
+          evidence for it. */}
+      <div className="mb-5">
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Settle up</div>
+        {settle.length === 0 ? (
+          <div className="mt-2 rounded-xl bg-credit-50 px-4 py-3 text-sm font-medium text-credit-700 ring-1 ring-credit-100">
+            All settled — nobody owes anybody.
+          </div>
+        ) : (
+          <>
+            <div className="mt-2 space-y-2">
+              {settle.map((s, idx: number) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200"
+                >
+                  <span className="flex min-w-0 items-center gap-2 font-medium text-slate-900">
+                    <span className="truncate">{s.from}</span>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0 text-slate-400">
+                      <path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="truncate">{s.to}</span>
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap text-lg font-semibold tnum text-slate-900">
+                    ₹{currency(s.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-xs text-slate-500">
+              {settle.length} transfer{settle.length === 1 ? '' : 's'} clears the whole group.
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="mb-3">
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-slate-100 pt-4">
+        <div>
+          <span className="text-sm text-slate-600">Trip total </span>
+          <span className="text-xl font-semibold tracking-tight tnum">₹{currency(totalTrip)}</span>
+        </div>
+        <div className="text-sm text-slate-500 tnum">₹{currency(perHead)} per head</div>
+      </div>
+
+      <div className="mb-5">
         <div className="text-sm font-medium mb-2">Paid vs Owed</div>
         <div className="grid grid-cols-1 gap-2">
           {net.map(n => (
@@ -740,27 +897,35 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
         </div>
       </div>
 
-      <div className="mb-3">
-        <div className="text-sm font-medium mb-2">Settlement suggestions</div>
-        {settle.length === 0 && <div className="text-sm text-slate-500">All settled</div>}
-        <div className="space-y-2">
-          {settle.map((s, idx: number) => (
-            <div key={idx} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-              <div className="text-sm">{s.from} → {s.to}</div>
-              <div className="font-semibold tnum">₹{currency(s.amount)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div>
-        <div className="text-sm font-medium mb-2">Category breakdown</div>
-        <div className="flex gap-2 flex-wrap">
-          {Object.entries(categoryTotals).map(([cat, amt]: [string, number]) => (
-            <div key={cat} className="rounded-lg bg-slate-50 px-3 py-2 text-sm tnum ring-1 ring-slate-200">{cat}: ₹{currency(amt)}</div>
-          ))}
-          {Object.keys(categoryTotals).length === 0 && <div className="text-sm text-slate-500">No expenses yet</div>}
-        </div>
+        <div className="text-sm font-medium mb-2">Where it went</div>
+        {Object.keys(categoryTotals).length === 0 ? (
+          <div className="text-sm text-slate-500">No expenses yet</div>
+        ) : (
+          <div className="space-y-2.5">
+            {Object.entries(categoryTotals)
+              .sort((a, b) => b[1] - a[1])
+              .map(([cat, amt]: [string, number]) => {
+                const pct = totalTrip > 0 ? (amt / totalTrip) * 100 : 0;
+                return (
+                  <div key={cat}>
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="capitalize text-slate-700">{cat}</span>
+                      <span className="tnum text-slate-600">
+                        ₹{currency(amt)}
+                        <span className="ml-2 text-slate-400">{Math.round(pct)}%</span>
+                      </span>
+                    </div>
+                    {/* Decorative: the figure and share are both stated above,
+                        so the bar adds shape rather than information. */}
+                    <div aria-hidden className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-brand-600/80" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -771,6 +936,9 @@ export default function TripExpenseApp() {
   const [showNew, setShowNew] = useState<boolean>(false);
   const [openTripId, setOpenTripId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Member | null>(null);
+  // SheetJS arrives in a lazy 139 kB chunk. On a slow connection the button
+  // would sit silent for seconds and get clicked repeatedly.
+  const [exportState, setExportState] = useState<'idle' | 'working' | 'failed'>('idle');
 
   const createTrip = (t: Trip) => setTrips((prev: Trip[]) => [t, ...prev]);
   const deleteTrip = (id: string) => setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
@@ -966,16 +1134,19 @@ export default function TripExpenseApp() {
     Export CSV
   </button>
   <button 
-    className="w-full inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50" 
+    className="w-full inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
+    disabled={exportState === 'working'}
     onClick={async () => {
       // SheetJS is bundled, not fetched from a CDN, so export works offline.
       // The import is dynamic so the ~400 KB library is code-split into its own
       // chunk and only downloaded when someone actually exports.
+      if (exportState === 'working') return;
+      setExportState('working');
       let XLSX;
       try {
         XLSX = await import('xlsx');
       } catch (err) {
-        alert('Could not load the spreadsheet library.');
+        setExportState('failed');
         return;
       }
 
@@ -1027,10 +1198,16 @@ export default function TripExpenseApp() {
       XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
       
       XLSX.writeFile(wb, `${current.name.replace(/\s+/g,'_')}_expenses.xlsx`);
+      setExportState('idle');
     }}
   >
-    Export XLSX
+    {exportState === 'working' ? 'Preparing…' : 'Export XLSX'}
   </button>
+  {exportState === 'failed' && (
+    <p role="alert" className="text-sm text-debit-700">
+      Could not load the spreadsheet library. Export to CSV instead.
+    </p>
+  )}
 </div>
                 </div>
               </div>

@@ -9,6 +9,7 @@ import App, {
   ledgerMembers,
   removalImpact,
   sampleTrip,
+  validateExpense,
   Expense,
   Trip,
 } from './App';
@@ -183,6 +184,78 @@ describe('ledgerMembers', () => {
       expenses: [],
     };
     expect(ledgerMembers(trip).map((m) => m.id)).toEqual(['a']);
+  });
+});
+
+describe('validateExpense', () => {
+  const members = [
+    { id: 'a', name: 'Asha' },
+    { id: 'b', name: 'Bilal' },
+  ];
+  const draft = (over = {}) => ({
+    title: 'Dinner',
+    total: '100',
+    method: 'equal' as const,
+    selected: ['a', 'b'],
+    customSplits: {},
+    members,
+    ...over,
+  });
+
+  it('accepts a complete equal split and allocates it exactly', () => {
+    const { errors, splits } = validateExpense(draft());
+    expect(errors).toEqual({});
+    expect(sumPaise(splits)).toBe(10000);
+  });
+
+  it('reports every problem at once rather than one at a time', () => {
+    const { errors } = validateExpense(draft({ title: '  ', total: '', selected: [] }));
+    expect(Object.keys(errors).sort()).toEqual(['participants', 'title', 'total']);
+  });
+
+  it('rejects totals that are not positive numbers', () => {
+    expect(validateExpense(draft({ total: 'abc' })).errors.total).toMatch(/not a number/i);
+    expect(validateExpense(draft({ total: '0' })).errors.total).toMatch(/more than zero/i);
+    expect(validateExpense(draft({ total: '-5' })).errors.total).toMatch(/more than zero/i);
+  });
+
+  it('rejects an empty participant list instead of recording an unowed expense', () => {
+    const { errors, splits } = validateExpense(draft({ selected: [] }));
+    expect(errors.participants).toBeTruthy();
+    expect(splits).toEqual([]);
+  });
+
+  it('ignores selected ids that are not current members', () => {
+    const { errors, splits } = validateExpense(draft({ selected: ['a', 'ghost'] }));
+    expect(errors).toEqual({});
+    expect(splits.map((s) => s.memberId)).toEqual(['a']);
+  });
+
+  it('says by how much a custom split misses the total, and in which direction', () => {
+    const short = validateExpense(
+      draft({ method: 'unequal' as const, customSplits: { a: '30', b: '30' } })
+    );
+    expect(short.errors.splits).toMatch(/40\.00 short/);
+
+    const over = validateExpense(
+      draft({ method: 'unequal' as const, customSplits: { a: '80', b: '40' } })
+    );
+    expect(over.errors.splits).toMatch(/20\.00 over/);
+  });
+
+  it('accepts a custom split that sums to the total', () => {
+    const { errors, splits } = validateExpense(
+      draft({ method: 'unequal' as const, customSplits: { a: '70', b: '30' } })
+    );
+    expect(errors).toEqual({});
+    expect(sumPaise(splits)).toBe(10000);
+  });
+
+  it('does not let amounts typed for removed members leak in', () => {
+    const { splits } = validateExpense(
+      draft({ method: 'unequal' as const, customSplits: { a: '100', ghost: '50' } })
+    );
+    expect(splits.map((s) => s.memberId)).toEqual(['a']);
   });
 });
 

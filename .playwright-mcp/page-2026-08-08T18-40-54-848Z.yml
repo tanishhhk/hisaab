@@ -1,0 +1,27 @@
+- generic [ref=f20e4]:
+  - banner [ref=f20e5]:
+    - generic [ref=f20e6]:
+      - heading "Trip Expense Manager" [level=1] [ref=f20e7]
+      - paragraph [ref=f20e8]: Saved in this browser only — it won't follow you to another device.
+    - generic [ref=f20e9]:
+      - button "Reset data" [ref=f20e10] [cursor=pointer]
+      - button "New trip" [ref=f20e11] [cursor=pointer]
+  - main [ref=f20e12]:
+    - generic [ref=f20e14]:
+      - heading "Your trips" [level=3] [ref=f20e15]
+      - generic [ref=f20e17]:
+        - generic [ref=f20e18]:
+          - generic [ref=f20e19]:
+            - heading "Indore Weekend (sample)" [level=4] [ref=f20e20]
+            - generic [ref=f20e21]: "Members: 4 • Expenses: 5"
+          - generic [ref=f20e22]:
+            - generic [ref=f20e23]: Total
+            - generic [ref=f20e24]: ₹16,950.00
+        - generic [ref=f20e25]:
+          - button "Open" [ref=f20e26] [cursor=pointer]
+          - button "Delete" [ref=f20e27] [cursor=pointer]
+    - complementary [ref=f20e28]:
+      - generic [ref=f20e29]:
+        - heading "Quick stats" [level=3] [ref=f20e30]
+        - generic [ref=f20e31]: "Trips: 1"
+        - generic [ref=f20e32]: "Total expenses (all trips): ₹16,950.00"
