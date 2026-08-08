@@ -1130,6 +1130,9 @@ export default function TripExpenseApp() {
   // The landing page is the entry surface until someone actually starts.
   const [seenLanding, setSeenLanding] = useLocalState<boolean>('hisaab_seen_landing', false);
   const [theme, toggleTheme] = useTheme();
+  // Phones only. On a wide screen every panel is visible at once, so the tabs
+  // are hidden and the classes below fall back to lg:block.
+  const [tab, setTab] = useState<'people' | 'expenses' | 'settle'>('expenses');
   const { user } = useSession();
   const [signInReason, setSignInReason] = useState<string | null>(null);
 
@@ -1297,8 +1300,34 @@ export default function TripExpenseApp() {
               </div>
             </div>
 
+            {/* One job per screen on a phone. Desktop still shows the lot. */}
+            <div className="flex gap-1 rounded-full border border-rule bg-surface p-1 lg:hidden">
+              {([
+                ['people', 'People', activeMembers.length],
+                ['expenses', 'Expenses', current.expenses.length],
+                ['settle', 'Settle up', null],
+              ] as const).map(([key, label, count]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  aria-current={tab === key ? 'page' : undefined}
+                  className={`flex min-h-[2.75rem] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-medium transition-colors ${
+                    tab === key ? 'bg-ink text-canvas' : 'text-ink-muted hover:bg-sunken'
+                  }`}
+                >
+                  {label}
+                  {count !== null && count > 0 && (
+                    <span className={`tnum text-xs ${tab === key ? 'text-canvas/70' : 'text-ink-subtle'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="space-y-4 lg:col-span-2">
+              <div className="space-y-4 lg:col-span-2 lg:contents">
+              <div className={`space-y-4 lg:col-span-2 lg:col-start-1 lg:row-start-1 ${tab === 'people' ? '' : 'hidden'} lg:block`}>
                 <MemberList
                   members={activeMembers}
                   addMember={(m: Member) => {
@@ -1307,7 +1336,9 @@ export default function TripExpenseApp() {
                   }}
                   onRequestRemove={(m: Member) => setPendingRemoval(m)}
                 />
+              </div>
 
+              <div className={`space-y-4 lg:col-span-2 lg:col-start-1 lg:row-start-2 ${tab === 'expenses' ? '' : 'hidden'} lg:block`}>
                 <ExpenseForm 
                   members={activeMembers}
                   onAdd={(exp: Expense) => {
@@ -1326,10 +1357,9 @@ export default function TripExpenseApp() {
                 />
               </div>
 
-              {/* On a phone the answer comes first: without this you scroll
-                  past every expense to reach who-owes-whom. On desktop it
-                  returns to the right-hand column. */}
-              <div className="order-first space-y-4 lg:order-none">
+              </div>
+
+              <div className={`space-y-4 lg:col-start-3 lg:row-start-1 lg:row-end-3 ${tab === 'settle' ? '' : 'hidden'} lg:block`}>
                 <SummaryPanel trip={current} />
                 <div className="rounded-2xl border border-rule bg-surface p-5">
                   <h2 className="font-display text-xl tracking-tight mb-3">Actions</h2>
