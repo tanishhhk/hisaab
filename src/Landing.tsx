@@ -196,8 +196,8 @@ const SOCIAL_ICONS: Record<string, React.ReactNode> = {
 
 const SOCIALS: { label: string; href: string; caption: string }[] = [
   { label: 'GitHub', href: 'https://github.com/tanishhhk', caption: 'every bug, publicly, forever' },
-  { label: 'Instagram', href: 'https://instagram.com/', caption: 'mostly food I did not split fairly' },
-  { label: 'LinkedIn', href: 'https://www.linkedin.com/', caption: 'the one wearing a collar' },
+  { label: 'Instagram', href: 'https://www.instagram.com/_tanishhhkk', caption: 'mostly food I did not split fairly' },
+  { label: 'LinkedIn', href: 'https://www.linkedin.com/in/tanishhhk', caption: 'the one wearing a collar' },
 ];
 
 // A caption that rises on hover and on keyboard focus, so it is reachable

@@ -16,3 +16,8 @@ dist/
 # OS junk
 .DS_Store
 
+# Screenshots and scratch output from verification runs. The real app icons
+# live under public/ and are kept.
+/*.png
+/*.jpg
+.playwright-mcp/
