@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Landing from './Landing';
 import ThemeToggle, { useTheme } from './ThemeToggle';
+import SignIn, { useSession, signOut } from './SignIn';
+import { isBackendConfigured } from './supabase';
 
 // TypeScript Interfaces
 export interface Member {
@@ -1006,6 +1008,8 @@ export default function TripExpenseApp() {
   // The landing page is the entry surface until someone actually starts.
   const [seenLanding, setSeenLanding] = useLocalState<boolean>('hisaab_seen_landing', false);
   const [theme, toggleTheme] = useTheme();
+  const { user } = useSession();
+  const [signInReason, setSignInReason] = useState<string | null>(null);
 
   const createTrip = (t: Trip) => setTrips((prev: Trip[]) => [t, ...prev]);
   const deleteTrip = (id: string) => setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
@@ -1042,7 +1046,7 @@ export default function TripExpenseApp() {
     if (ok) setTrips([]);
   };
 
-  if (!seenLanding && trips.length === 0) {
+  if (!seenLanding) {
     return (
       <Landing
         theme={theme}
@@ -1058,13 +1062,40 @@ export default function TripExpenseApp() {
       <div className="max-w-6xl mx-auto">
         <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-display text-2xl tracking-tight">Hisaab</h1>
+            <h1 className="font-display text-2xl tracking-tight">
+              <button
+                type="button"
+                onClick={() => setSeenLanding(false)}
+                title="Back to the Hisaab home page"
+                className="rounded-full transition-opacity hover:opacity-70"
+              >
+                Hisaab
+              </button>
+            </h1>
             <p className="text-sm text-ink-subtle mt-1">
               Saved in this browser only. It will not follow you to another device.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            {isBackendConfigured && (
+              user ? (
+                <button
+                  onClick={() => signOut()}
+                  title={user.email || 'Signed in'}
+                  className="rounded-full px-3 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
+                >
+                  Sign out
+                </button>
+              ) : (
+                <button
+                  onClick={() => setSignInReason('')}
+                  className="rounded-full px-3 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
+                >
+                  Sign in
+                </button>
+              )
+            )}
             {/* Destructive and irreversible, so it stays out of reach of the
                 primary action and only appears when there is data to lose. */}
             {!current && trips.length > 0 && (
@@ -1289,6 +1320,15 @@ export default function TripExpenseApp() {
       </div>
 
       {showNew && <NewTripModal onClose={() => setShowNew(false)} onCreate={createTrip} />}
+      {signInReason !== null && (
+        <Modal onClose={() => setSignInReason(null)} labelledBy="signin-title" width="max-w-md">
+          <SignIn
+            reason={signInReason || undefined}
+            onClose={() => setSignInReason(null)}
+            onSignedIn={() => setSignInReason(null)}
+          />
+        </Modal>
+      )}
       {current && pendingRemoval && (
         <RemoveMemberModal
           member={pendingRemoval}

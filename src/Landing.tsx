@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
+import { motion, useScroll, useSpring, useTransform, useReducedMotion } from 'framer-motion';
 import ThemeToggle from './ThemeToggle';
 
 // The argument this page makes, in order:
@@ -40,6 +40,55 @@ function Wordmark() {
   );
 }
 
+// The one word in the headline that is the product's name, marked in the accent
+// colour. The motion is deliberately small: a ledger rule drawn under the word,
+// and a few rupee marks settling upward out of it. Money, stated quietly.
+function HisaabWord() {
+  const reduce = useReducedMotion();
+  return (
+    <span className="relative inline-block text-accent">
+      hisaab
+      <svg
+        viewBox="0 0 100 4"
+        preserveAspectRatio="none"
+        aria-hidden
+        className="absolute inset-x-0 -bottom-[0.06em] h-[0.1em] w-full overflow-visible"
+      >
+        <motion.path
+          d="M0 2 H100"
+          stroke="currentColor"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          initial={reduce ? false : { pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 0.9, delay: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </svg>
+
+      {!reduce &&
+        [0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            aria-hidden
+            className="pointer-events-none absolute font-sans text-[0.2em] font-medium text-accent"
+            style={{ left: `${20 + i * 27}%`, bottom: '0.05em' }}
+            initial={{ opacity: 0, y: 0 }}
+            animate={{ opacity: [0, 0.85, 0], y: ['0em', '-2.2em'] }}
+            transition={{
+              duration: 2.8,
+              delay: 1.6 + i * 0.55,
+              repeat: Infinity,
+              repeatDelay: 2.4,
+              ease: 'easeOut',
+            }}
+          >
+            ₹
+          </motion.span>
+        ))}
+    </span>
+  );
+}
+
 function ChatBubble({ from, text, mine }: { from: string; text: string; mine?: boolean }) {
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
@@ -73,12 +122,18 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
     target: turnRef,
     offset: ['start start', 'end start'],
   });
-  const chatY = useTransform(scrollYProgress, [0, 1], ['0%', '-38%']);
-  const chatOpacity = useTransform(scrollYProgress, [0, 0.45, 0.7], [1, 0.55, 0]);
-  const chatBlur = useTransform(scrollYProgress, [0.2, 0.7], ['blur(0px)', 'blur(10px)']);
-  const answerOpacity = useTransform(scrollYProgress, [0.5, 0.78], [0, 1]);
-  const answerY = useTransform(scrollYProgress, [0.5, 0.78], [28, 0]);
-  const answerScale = useTransform(scrollYProgress, [0.5, 0.78], [0.97, 1]);
+  // Raw scroll position is jittery, especially on a trackpad or a phone.
+  // Running it through a spring smooths the whole sequence at once.
+  const p = useSpring(scrollYProgress, { stiffness: 90, damping: 26, restDelta: 0.0005 });
+
+  // The two states overlap: the chat is still leaving as the answer arrives,
+  // so it reads as a substitution rather than two separate fades.
+  const chatY = useTransform(p, [0, 1], ['0%', '-24%']);
+  const chatOpacity = useTransform(p, [0, 0.3, 0.55], [1, 0.7, 0]);
+  const chatBlur = useTransform(p, [0.1, 0.55], ['blur(0px)', 'blur(8px)']);
+  const answerOpacity = useTransform(p, [0.3, 0.6], [0, 1]);
+  const answerY = useTransform(p, [0.3, 0.6], [22, 0]);
+  const answerScale = useTransform(p, [0.3, 0.6], [0.975, 1]);
 
   const still = reduce ? {} : undefined;
 
@@ -99,22 +154,23 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
 
       {/* Hero. The question is the headline because it is the sentence every
           group actually sends. */}
-      <section className="mx-auto max-w-6xl px-6 pb-20 pt-10 sm:pt-16">
+      <section className="mx-auto max-w-6xl px-6 pb-10 pt-8 sm:pt-12">
         <motion.h1
           initial={reduce ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="max-w-[14ch] font-display text-[clamp(2.75rem,9vw,6rem)] font-semibold leading-[0.95] tracking-tighter"
+          className="max-w-[15ch] font-display text-[clamp(2.5rem,8vw,5.5rem)] font-semibold leading-[0.95] tracking-tighter"
         >
           The trip is over.
-          The hisaab is not.
+          <br />
+          The <HisaabWord /> is not.
         </motion.h1>
 
         <motion.p
           initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-7 max-w-[52ch] text-lg leading-relaxed text-ink-muted"
+          className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-muted"
         >
           Six people, eleven bills, and nobody remembers who paid for the cab. Hisaab keeps the reckoning and works out the fewest
           payments that settle everyone up, down to the last paisa.
@@ -124,7 +180,7 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
           initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-9 flex flex-wrap items-center gap-3"
+          className="mt-8 flex flex-wrap items-center gap-3"
         >
           <button
             onClick={onStart}
@@ -140,23 +196,23 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
           </button>
         </motion.div>
 
-        <p className="mt-5 text-sm text-ink-subtle">
-          No account. Nothing leaves your browser.
+        <p className="mt-4 text-sm text-ink-subtle">
+          No account needed. Nothing leaves your browser.
         </p>
       </section>
 
       {/* The turn. One long scroll in which the mess is replaced by the answer. */}
-      <section ref={turnRef} className="relative h-[260vh]">
+      <section ref={turnRef} className="relative h-[190vh]">
         <div className="sticky top-0 flex h-screen items-center overflow-hidden">
           <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-2 lg:items-center">
             <div>
-              <h2 className="max-w-[16ch] font-display text-[clamp(1.9rem,4.4vw,3.25rem)] font-semibold leading-[1.02] tracking-tighter">
-                This is the part everyone dreads.
+              <h2 className="max-w-[15ch] font-display text-[clamp(1.9rem,4.4vw,3.25rem)] font-semibold leading-[1.02] tracking-tighter">
+                Three days later, in the group chat.
               </h2>
-              <p className="mt-5 max-w-[46ch] text-ink-muted">
-                The arithmetic was never the hard bit. It is the reconstruction,
-                three days later, from memory, in a chat where half the payments
-                were never mentioned.
+              <p className="mt-5 max-w-[44ch] text-lg text-ink-muted">
+                This is the part everyone dreads. The arithmetic was never the
+                hard bit. It is the reconstruction, from memory, in a chat where
+                half the payments were never mentioned.
               </p>
               <motion.p
                 style={still ?? { opacity: answerOpacity }}
@@ -208,19 +264,84 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
         </div>
       </section>
 
-      {/* What it actually does. Plain, because the argument is already made. */}
+      {/* The claim, then the proof. A real bill, split the awkward way, with
+          the arithmetic shown rather than asserted. */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <h2 className="max-w-[18ch] font-display text-[clamp(1.75rem,4vw,2.75rem)] font-semibold leading-[1.05] tracking-tighter">
           Built to be exactly right about money.
         </h2>
-        <div className="mt-12 grid gap-x-10 gap-y-10 border-t border-rule pt-10 sm:grid-cols-2 lg:grid-cols-3">
+        <p className="mt-5 max-w-[52ch] text-lg text-ink-muted">
+          Not everything divides by the number of people at the table. Three had
+          the biryani, two ate vegetarian, and the tax belongs to whoever ordered
+          what. Hisaab lets you say so.
+        </p>
+
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-100px' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-12 overflow-hidden rounded-2xl border border-rule bg-surface"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-rule px-6 py-5">
+            <h3 className="font-display text-xl tracking-tight">Dinner, five people</h3>
+            <span className="tnum text-ink-muted">&#8377;2,205.00 on the bill</span>
+          </div>
+
+          <div className="grid divide-y divide-rule sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            {[
+              {
+                who: 'Asha and Divya',
+                note: 'ate vegetarian',
+                food: '900.00',
+                tax: '45.00',
+                each: '472.50',
+                count: 'each, split two ways',
+              },
+              {
+                who: 'Rohan, Bilal and Chetan',
+                note: 'ordered the biryani and the fish',
+                food: '1,200.00',
+                tax: '60.00',
+                each: '420.00',
+                count: 'each, split three ways',
+              },
+            ].map((g) => (
+              <div key={g.who} className="px-6 py-6">
+                <div className="font-medium">{g.who}</div>
+                <div className="text-sm text-ink-subtle">{g.note}</div>
+                <dl className="mt-4 space-y-1.5 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-ink-muted">What they ordered</dt>
+                    <dd className="tnum">&#8377;{g.food}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-ink-muted">Their share of tax</dt>
+                    <dd className="tnum">&#8377;{g.tax}</dd>
+                  </div>
+                </dl>
+                <div className="mt-4 flex items-baseline justify-between gap-4 border-t border-rule pt-4">
+                  <span className="text-sm text-ink-muted">{g.count}</span>
+                  <span className="font-display text-2xl tracking-tight tnum">&#8377;{g.each}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="border-t border-rule bg-sunken px-6 py-4 text-sm text-ink-muted tnum">
+            2 &#215; &#8377;472.50 plus 3 &#215; &#8377;420.00 is &#8377;2,205.00. The parts always add back
+            up to the bill.
+          </p>
+        </motion.div>
+
+        <div className="mt-16 grid gap-x-10 gap-y-9 border-t border-rule pt-10 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            ['Splits that actually add up', 'Shares are worked out in paise and the remainder is handed out one at a time, so ₹100 across three people is 33.34 + 33.33 + 33.33, never ₹99.99.'],
-            ['Equal or exact', 'Split evenly across whoever was there, or type each person’s amount by hand. Hisaab checks the parts against the total before it accepts them.'],
-            ['The fewest transfers', 'Rather than everyone paying everyone, it collapses the whole trip into the shortest list of payments that clears the group.'],
-            ['Leaves with your data', 'Export the whole trip to CSV or Excel, with a sheet per person and a summary that reconciles.'],
-            ['Works with no signal', 'It runs entirely in your browser. On a bus, in a hill station, on aeroplane mode.'],
+            ['Nothing goes missing in the rounding', 'Shares are worked out in paise and the odd remainder is handed out one at a time, so ₹100 across three people is 33.34 plus 33.33 plus 33.33, never ₹99.99.'],
+            ['The fewest transfers', 'Rather than everyone paying everyone, the whole trip collapses into the shortest list of payments that clears the group.'],
             ['People change mid-trip', 'Someone leaves early? Redistribute their share across who remains, or keep the history exactly as it was recorded.'],
+            ['Leaves with your data', 'Export the whole trip to CSV or Excel, with a row per person per expense and a summary that reconciles.'],
+            ['Works with no signal', 'It runs entirely in your browser, and installs to your phone. On a bus, in a hill station, on aeroplane mode.'],
+            ['It checks your maths', 'Type the amounts by hand and Hisaab tells you how far off the total you are, and in which direction, before it accepts them.'],
           ].map(([title, body]) => (
             <motion.div
               key={title}
@@ -241,20 +362,6 @@ export default function Landing({ onStart, onSample, theme, onToggleTheme }: {
           <h2 className="mx-auto max-w-[16ch] font-display text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-[1.02] tracking-tighter">
             Settle the trip before you unpack.
           </h2>
-          <div className="mt-9 flex flex-wrap justify-center gap-3">
-            <button
-              onClick={onStart}
-              className="rounded-full bg-ink px-7 py-3.5 font-medium text-canvas transition-colors hover:bg-ink/88"
-            >
-              Start a trip
-            </button>
-            <button
-              onClick={onSample}
-              className="rounded-full border border-rule-strong px-7 py-3.5 font-medium transition-colors hover:bg-sunken"
-            >
-              Open a worked example
-            </button>
-          </div>
         </div>
       </section>
 
