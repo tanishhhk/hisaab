@@ -341,14 +341,14 @@ export function sampleTrip(): Trip {
   return {
     id: newId(),
     createdAt: new Date().toISOString(),
-    name: 'Indore Weekend (sample)',
+    name: 'Weekend trip (sample)',
     members,
     expenses: [
       expense('Hotel, two nights', bilal, 8600, allocateEqually(8600, all), 'hotel', 5),
-      expense('Sarafa street food', asha, 2400, allocateEqually(2400, all), 'food', 5),
-      expense('Cab to Mandu', chetan, 3500, allocateEqually(3500, [asha.id, bilal.id, chetan.id]), 'car', 4),
+      expense('Night market food', asha, 2400, allocateEqually(2400, all), 'food', 5),
+      expense('Cab to the fort', chetan, 3500, allocateEqually(3500, [asha.id, bilal.id, chetan.id]), 'car', 4),
       expense('Petrol', asha, 1000, [{ memberId: asha.id, amount: 600 }, { memberId: divya.id, amount: 400 }], 'petrol', 4),
-      expense('56 Dukan breakfast', divya, 1450, allocateEqually(1450, all), 'food', 3),
+      expense('Breakfast, day two', divya, 1450, allocateEqually(1450, all), 'food', 3),
     ],
   };
 }
@@ -536,7 +536,7 @@ function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setName(e.target.value); if (error) setError(''); }}
         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') create(); }}
-        placeholder="Indore, three nights"
+        placeholder="Hill trip, three nights"
         aria-invalid={!!error}
         aria-describedby={error ? 'new-trip-error' : undefined}
       />

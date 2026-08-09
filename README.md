@@ -1,10 +1,11 @@
 # Hisaab
 
-A shared-expense tracker for trips. Log what everyone spent, and get back the
-shortest list of payments that settles the group.
+Everyone paid for something. Nobody agrees on what. Hisaab works it out and
+clears the whole group in the fewest payments possible — exact to the last
+paisa.
 
-Built during an Indore to Omkareshwar trip, where the group chat had become an
-unreadable ledger of "I'll get this one."
+A shared-expense tracker for trips, built for the part everyone dreads: the
+settling up.
 
 ---
 
@@ -32,7 +33,15 @@ retired rather than deleted, so their past payments stay in the ledger.
 per person per expense and a summary that reconciles.
 
 **Works with no signal.** Everything runs in the browser and stays usable on a
-bus, in a hill station, or on aeroplane mode.
+bus, in a hill station, or on aeroplane mode. It installs to a phone home screen
+and opens like an app.
+
+---
+
+## Roadmap
+
+Native iOS and Android builds are planned, for the App Store and Google Play.
+The web app is the reference implementation and will stay free.
 
 ---
 

@@ -13,12 +13,12 @@ const CHAT: { from: string; text: string; mine?: boolean }[] = [
   { from: 'Rohan', text: 'guys settle up karo, I paid for the hotel' },
   { from: 'Asha', text: 'how much was it' },
   { from: 'Rohan', text: '8600 for both nights' },
-  { from: 'Divya', text: 'I paid 1450 at 56 Dukan btw' },
-  { from: 'Chetan', text: 'and the Mandu cab was 3500, I paid that' },
+  { from: 'Divya', text: 'I paid 1450 for breakfast btw' },
+  { from: 'Chetan', text: 'and the cab to the fort was 3500, I paid that' },
   { from: 'Asha', text: 'wait was Divya in the cab?' },
   { from: 'Divya', text: 'no I stayed back' },
   { from: 'You', text: 'so do I owe Rohan or Chetan', mine: true },
-  { from: 'Asha', text: 'I paid 2400 at Sarafa, that was everyone' },
+  { from: 'Asha', text: 'I paid 2400 at the night market, that was everyone' },
   { from: 'Chetan', text: 'didn’t you already pay me back for petrol' },
   { from: 'Rohan', text: 'that was last trip' },
   { from: 'Asha', text: 'guys can someone just make a sheet' },
@@ -99,14 +99,69 @@ const LEDGER: { what: string; who: string; amount: number; note?: string }[] = [
   { what: 'Hotel, two nights', who: 'Rohan', amount: 8600 },
   // Two people put money in at the counter, which Hisaab records as two
   // payments against one expense and still settles correctly.
-  { what: 'Sarafa street food', who: 'Asha and Rohan', amount: 2400, note: 'split payment' },
-  { what: 'Cab to Mandu', who: 'Chetan', amount: 3500 },
+  { what: 'Night market food', who: 'Asha and Rohan', amount: 2400, note: 'split payment' },
+  { what: 'Cab to the fort', who: 'Chetan', amount: 3500 },
   { what: 'Petrol', who: 'Asha', amount: 1000 },
-  { what: '56 Dukan breakfast', who: 'Divya', amount: 1450 },
+  { what: 'Breakfast, day two', who: 'Divya', amount: 1450 },
 ];
 
 const inr = (n: number) =>
   n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// One restaurant bill, itemised, because the argument this section settles is
+// about specific dishes. Tax is 5% of each group's own food, which is the whole
+// point: it follows what was ordered, not how many people sat down.
+// 380+280+240 = 900, 640+420+140 = 1200, so 2,100 food and 105.00 tax.
+const BILL: {
+  who: string;
+  ate: string;
+  items: [string, string][];
+  food: string;
+  tax: string;
+  sum: string;
+  by: number;
+  each: string;
+}[] = [
+  {
+    who: 'Asha and Divya',
+    ate: 'ate vegetarian',
+    items: [
+      ['Paneer tikka', '380.00'],
+      ['Dal makhani', '280.00'],
+      ['Jeera rice', '240.00'],
+    ],
+    food: '900.00',
+    tax: '45.00',
+    sum: '945.00',
+    by: 2,
+    each: '472.50',
+  },
+  {
+    who: 'Rohan, Bilal and Chetan',
+    ate: 'had the biryani and the fish',
+    items: [
+      ['Hyderabadi biryani', '640.00'],
+      ['Fish curry', '420.00'],
+      ['Butter naan', '140.00'],
+    ],
+    food: '1,200.00',
+    tax: '60.00',
+    sum: '1,260.00',
+    by: 3,
+    each: '420.00',
+  },
+];
+
+// The leader dots that run from a dish to its price. A real bill's device, and
+// the thing that makes a two-column list read as one line rather than two.
+function Leader() {
+  return (
+    <span
+      aria-hidden
+      className="mx-2 min-w-[1.5rem] flex-1 translate-y-[-0.28em] border-b border-dotted border-ink/25"
+    />
+  );
+}
 
 function LedgerStrip({ reduce }: { reduce: boolean }) {
   const [shown, setShown] = React.useState(reduce ? LEDGER.length : 0);
@@ -132,7 +187,7 @@ function LedgerStrip({ reduce }: { reduce: boolean }) {
         sample
       </span>
       <div className="flex items-baseline justify-between gap-4 border-b border-rule pb-3">
-        <span className="font-display text-lg tracking-tight">Indore, three nights</span>
+        <span className="font-display text-lg tracking-tight">Hill trip, three nights</span>
         <span className="text-sm text-ink-subtle">4 people</span>
       </div>
 
@@ -477,8 +532,9 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           transition={{ duration: 0.7, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
           className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-muted"
         >
-          Six people, eleven bills, and nobody remembers who paid for the cab. Hisaab keeps the reckoning and works out the fewest
-          payments that settle everyone up, down to the last paisa.
+          Everyone paid for something. Nobody agrees on what. Hisaab works it
+          out and clears the whole group in the fewest payments possible —
+          exact to the last paisa.
         </motion.p>
 
         <motion.div
@@ -608,70 +664,52 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-100px' }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-12 overflow-hidden rounded-2xl border border-rule bg-surface"
+          className="mx-auto mt-12 max-w-[34rem] overflow-hidden rounded-2xl border border-rule bg-surface"
         >
-          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-rule px-6 py-5 sm:px-8">
-            <h3 className="font-display text-xl tracking-tight">One dinner bill</h3>
-            <span className="tnum text-ink-muted">
-              <span className="whitespace-nowrap">&#8377;2,100.00 of food</span>{' '}
-              <span className="whitespace-nowrap">plus &#8377;105.00 tax</span>
-            </span>
+          {/* Set as the bill itself: centred header, leader dots, figures in a
+              right-aligned tabular column, a double rule above the total. The
+              annotations are the only thing a paper bill would not have. */}
+          <div className="border-b border-dashed border-rule px-6 py-6 text-center sm:px-8">
+            <h3 className="font-display text-lg tracking-[0.2em] uppercase">One dinner bill</h3>
+            <p className="mt-1.5 text-xs uppercase tracking-[0.18em] text-ink-subtle">
+              Table 7 · Five covers
+            </p>
           </div>
 
-          {/* Each row reads as one sentence of arithmetic: what the group
-              ordered, its tax, divided by how many of them there were. */}
-          <div className="divide-y divide-rule">
-            {[
-              {
-                who: 'Asha and Divya',
-                ate: 'ate vegetarian',
-                food: '900.00',
-                tax: '45.00',
-                sum: '945.00',
-                by: 2,
-                each: '472.50',
-              },
-              {
-                who: 'Rohan, Bilal and Chetan',
-                ate: 'had the biryani and the fish',
-                food: '1,200.00',
-                tax: '60.00',
-                sum: '1,260.00',
-                by: 3,
-                each: '420.00',
-              },
-            ].map((g) => (
+          <div className="divide-y divide-dashed divide-rule">
+            {BILL.map((g) => (
               <div key={g.who} className="px-6 py-6 sm:px-8">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-medium">{g.who}</span>
                   <span className="text-sm text-ink-subtle">{g.ate}</span>
                 </div>
 
-                {/* Each operator travels with the term it introduces. Left
-                    loose they wrapped to the end of a line, so a row could
-                    finish on a stranded "+" and the equation stopped reading
-                    as arithmetic. */}
-                <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 tnum text-[0.95rem]">
-                  <span className="rounded-full bg-sunken px-3 py-1.5">
-                    &#8377;{g.food} <span className="text-ink-subtle">of food</span>
-                  </span>
-                  <span className="flex items-center gap-2.5 whitespace-nowrap">
-                    <span className="text-ink-subtle">+</span>
-                    <span className="rounded-full bg-sunken px-3 py-1.5">
-                      &#8377;{g.tax} <span className="text-ink-subtle">tax</span>
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-2.5 whitespace-nowrap">
-                    <span className="text-ink-subtle">=</span>
-                    <span className="rounded-full bg-sunken px-3 py-1.5">&#8377;{g.sum}</span>
-                  </span>
-                  <span className="text-ink-subtle">shared by {g.by}</span>
+                <div className="mt-3.5 space-y-1.5 text-[0.95rem]">
+                  {g.items.map(([dish, price]) => (
+                    <div key={dish} className="flex items-baseline">
+                      <span className="text-ink-muted">{dish}</span>
+                      <Leader />
+                      <span className="tnum shrink-0 text-ink">{price}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-baseline pt-1.5 text-ink-subtle">
+                    <span>Tax at 5%</span>
+                    <Leader />
+                    <span className="tnum shrink-0">{g.tax}</span>
+                  </div>
+                  <div className="flex items-baseline border-t border-rule pt-2 font-medium">
+                    <span>Their share of the bill</span>
+                    <Leader />
+                    <span className="tnum shrink-0">{g.sum}</span>
+                  </div>
+                </div>
 
-                  {/* The result and its unit are one phrase and must never
-                      split. Wrapping is what left "each" stranded on a line of
-                      its own; giving the group its own row on a phone lets the
-                      sentence actually resolve. */}
-                  <span className="flex w-full items-baseline gap-2 whitespace-nowrap pt-1 sm:w-auto sm:pt-0">
+                {/* The annotation a paper bill cannot make: the same figure,
+                    divided. Tinted rather than boxed so it reads as a note in
+                    the margin instead of a second card. */}
+                <div className="mt-3.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl bg-accent/[0.07] px-3.5 py-2.5 text-[0.95rem] tnum">
+                  <span className="text-ink-muted">&#8377;{g.sum} between {g.by}</span>
+                  <span className="flex items-baseline gap-2 whitespace-nowrap">
                     <span className="text-ink-subtle">=</span>
                     <span className="font-display text-2xl tracking-tight text-ink">
                       &#8377;{g.each}
@@ -683,12 +721,33 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             ))}
           </div>
 
-          <p className="border-t border-rule bg-sunken px-6 py-4 text-sm text-ink-muted sm:px-8">
-            <span className="tnum">
-              Two at &#8377;472.50 and three at &#8377;420.00 comes to &#8377;2,205.00.
-            </span>{' '}
-            Exactly the bill. Nobody subsidised the biryani.
-          </p>
+          <div className="border-t border-dashed border-rule bg-sunken px-6 py-6 sm:px-8">
+            <div className="flex items-baseline text-ink-muted">
+              <span>Food</span>
+              <Leader />
+              <span className="tnum shrink-0">2,100.00</span>
+            </div>
+            <div className="mt-1.5 flex items-baseline text-ink-muted">
+              <span>Tax</span>
+              <Leader />
+              <span className="tnum shrink-0">105.00</span>
+            </div>
+            {/* The double rule above a total is the one typographic convention
+                every printed bill shares. */}
+            <div className="mt-3 flex items-baseline border-t-[3px] border-double border-ink/25 pt-3">
+              <span className="font-display text-lg tracking-tight">Total</span>
+              <Leader />
+              <span className="tnum shrink-0 font-display text-2xl tracking-tight">
+                &#8377;2,205.00
+              </span>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-ink-muted">
+              <span className="tnum">
+                Two at &#8377;472.50 and three at &#8377;420.00 comes to &#8377;2,205.00.
+              </span>{' '}
+              Exactly the bill. Nobody subsidised the biryani.
+            </p>
+          </div>
         </motion.div>
 
         {/* A nod to the category, never a name. It earns its keep only
@@ -744,10 +803,10 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
               Built by someone who was tired of being the one with the calculator.
             </h2>
             <p className="mt-4 max-w-[46ch] text-ink-muted">
-              Hisaab exists because a weekend in Indore ended in a group chat
-              that ran to forty messages and still got the maths wrong. It is
-              free, it has no adverts, and it will never ask who you had dinner
-              with. If it saves you one argument, it has paid for itself.
+              Hisaab exists because settling up should take a minute, not forty
+              messages and a wrong answer. It is free, it has no adverts, and it
+              will never ask who you had dinner with. If it saves you one
+              argument, it has paid for itself.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-2">
