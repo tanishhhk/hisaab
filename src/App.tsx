@@ -4,6 +4,8 @@ import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
 import { newId, migrateLegacyIds, tripsKey } from './sync/ids';
+import { useSync } from './sync/useSync';
+import SyncStatus from './SyncStatus';
 
 // TypeScript Interfaces
 export interface Member {
@@ -1136,6 +1138,82 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
   );
 }
 
+// Matches TripCard's geometry so the list does not jump when real data lands.
+function TripCardSkeleton() {
+  return (
+    <div data-testid="trip-skeleton" aria-hidden className="rounded-2xl border border-rule bg-surface p-5">
+      <div className="flex justify-between items-start">
+        <div className="space-y-2">
+          <div className="h-5 w-32 animate-pulse rounded bg-sunken" />
+          <div className="h-4 w-40 animate-pulse rounded bg-sunken" />
+        </div>
+        <div className="space-y-2 text-right">
+          <div className="ml-auto h-4 w-10 animate-pulse rounded bg-sunken" />
+          <div className="ml-auto h-5 w-20 animate-pulse rounded bg-sunken" />
+        </div>
+      </div>
+      <div className="mt-4 h-11 animate-pulse rounded-full bg-sunken" />
+    </div>
+  );
+}
+
+// A failed pull must never render as "you have no trips". Saying so would
+// invite a duplicate that then syncs and pollutes the account.
+function LoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-2xl border border-rule bg-surface p-8 text-center">
+      <h2 className="font-display text-xl tracking-tight">Couldn't load your trips</h2>
+      <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
+        Anything saved in this browser is still here and still safe. This is only about
+        reaching your account.
+      </p>
+      <button
+        onClick={onRetry}
+        className="mt-4 inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+// Shown once, and only after the pull has settled: offering to upload trips
+// before we know what is already up there risks duplicating them.
+function AdoptPrompt({ count, onAdopt, onDismiss }: {
+  count: number;
+  onAdopt: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 id="adopt-title" className="font-display text-xl tracking-tight">
+          Bring your {count} trip{count === 1 ? '' : 's'} into this account?
+        </h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          {count === 1 ? 'It was' : 'They were'} saved in this browser before you signed in.
+          Adding {count === 1 ? 'it' : 'them'} means {count === 1 ? 'it follows' : 'they follow'} you
+          to your other devices. Saying no leaves {count === 1 ? 'it' : 'them'} here, untouched.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onDismiss}
+          className="rounded-full border border-rule-strong px-4 py-2 text-sm font-medium transition-colors hover:bg-sunken"
+        >
+          Leave them here
+        </button>
+        <button
+          onClick={onAdopt}
+          className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+        >
+          Bring them in
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function TripExpenseApp() {
   const { user } = useSession();
   const [trips, setTrips] = useLocalState<Trip[]>(tripsKey(user?.id ?? null), []);
@@ -1158,14 +1236,32 @@ export default function TripExpenseApp() {
   // are hidden and the classes below fall back to lg:block.
   const [tab, setTab] = useState<'people' | 'expenses' | 'settle'>('expenses');
   const [signInReason, setSignInReason] = useState<string | null>(null);
+  // Only offered once per account, so a decline stays declined.
+  const [adoptAsked, setAdoptAsked] = useLocalState<Record<string, boolean>>('hisaab_adopt_asked', {});
+  const [orphans, setOrphans] = useState<Trip[] | null>(null);
 
-  const createTrip = (t: Trip) => setTrips((prev: Trip[]) => [t, ...prev]);
-  const deleteTrip = (id: string) => setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
+  const sync = useSync(user?.id ?? null, trips, setTrips);
+
+  // Every mutation stamps the trip and marks it dirty. The push itself is a
+  // background consequence, never a step the user waits on.
+  const stampNow = (t: Trip): Trip => ({ ...t, updatedAt: new Date().toISOString() });
+
+  const createTrip = (t: Trip) => {
+    setTrips((prev: Trip[]) => [stampNow(t), ...prev]);
+    sync.markDirty(t.id);
+  };
+  const deleteTrip = (id: string) => {
+    setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
+    sync.markDeleted(id);
+  };
 
   const openTrip = (id: string) => setOpenTripId(id);
   const closeTrip = () => setOpenTripId(null);
 
-  const updateTrip = (updated: Trip) => setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? updated : t));
+  const updateTrip = (updated: Trip) => {
+    setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? stampNow(updated) : t));
+    sync.markDirty(updated.id);
+  };
 
   const current = trips.find((t: Trip) => t.id === openTripId);
   const activeMembers = current ? current.members.filter(isActive) : [];
@@ -1179,8 +1275,45 @@ export default function TripExpenseApp() {
   // settlement output, not to leave another empty trip on the list.
   const loadSample = () => {
     const t = sampleTrip();
-    setTrips((prev: Trip[]) => [t, ...prev]);
+    setTrips((prev: Trip[]) => [stampNow(t), ...prev]);
+    sync.markDirty(t.id);
     setOpenTripId(t.id);
+  };
+
+  // Offer to adopt anonymous trips, but only once the pull has settled — the
+  // anonymous store is never modified, so declining costs nothing.
+  useEffect(() => {
+    const me = user?.id;
+    if (!me || !sync.hydrated || sync.pullFailed) return;
+    if (adoptAsked[me]) return;
+    try {
+      const raw = localStorage.getItem(tripsKey(null));
+      const local: Trip[] = raw ? JSON.parse(raw) : [];
+      if (local.length > 0) setOrphans(local);
+      else setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    } catch (e) {
+      setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    }
+  }, [user?.id, sync.hydrated, sync.pullFailed, adoptAsked, setAdoptAsked]);
+
+  const adoptOrphans = () => {
+    const me = user?.id;
+    if (!orphans || !me) return;
+    // Ids are already uuids and unique, so this is a plain union. The
+    // anonymous store is left exactly as it was: nothing is deleted, so
+    // signing out reveals it again intact.
+    const mine = new Set(trips.map((t: Trip) => t.id));
+    const incoming = migrateLegacyIds(orphans).filter((t: Trip) => !mine.has(t.id));
+    setTrips((prev: Trip[]) => [...incoming, ...prev]);
+    incoming.forEach((t: Trip) => sync.markDirty(t.id));
+    setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    setOrphans(null);
+  };
+
+  const declineOrphans = () => {
+    const me = user?.id;
+    if (me) setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    setOrphans(null);
   };
 
   // Wiping every trip is unrecoverable, so name what is about to be lost.
@@ -1191,7 +1324,9 @@ export default function TripExpenseApp() {
       `Delete all ${n} trip${n === 1 ? '' : 's'} and ${expenseCount} expense${expenseCount === 1 ? '' : 's'}?\n\n` +
       'This cannot be undone. Export to CSV first if you want a copy.'
     );
-    if (ok) setTrips([]);
+    if (!ok) return;
+    trips.forEach((t: Trip) => sync.markDeleted(t.id));
+    setTrips([]);
   };
 
   if (!seenLanding) {
@@ -1233,9 +1368,11 @@ export default function TripExpenseApp() {
                 Hisaab
               </button>
             </h1>
-            <p className="text-sm text-ink-subtle mt-1">
-              Saved in this browser only. It will not follow you to another device.
-            </p>
+            <SyncStatus
+              phase={sync.phase}
+              onRetry={sync.retry}
+              onSignIn={() => setSignInReason('Sign in again to keep syncing.')}
+            />
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
@@ -1276,7 +1413,29 @@ export default function TripExpenseApp() {
           </div>
         </header>
 
-        {!current && trips.length === 0 && (
+        {!current && trips.length === 0 && sync.skeleton && (
+          <main>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <TripCardSkeleton />
+              <TripCardSkeleton />
+              <TripCardSkeleton />
+            </div>
+          </main>
+        )}
+
+        {!current && trips.length === 0 && !sync.skeleton && sync.hydrated && sync.pullFailed && (
+          <main>
+            <LoadFailed onRetry={sync.retry} />
+          </main>
+        )}
+
+        {/* hydrated is required, not implied by the two flags above. For the
+            first 200ms of a pull the skeleton is deliberately suppressed, and
+            without this guard that window would render EmptyState — telling
+            someone with cloud trips that they have none, which invites a
+            duplicate. Rendering nothing briefly is the honest answer when the
+            answer is not yet known. */}
+        {!current && trips.length === 0 && !sync.skeleton && !sync.pullFailed && sync.hydrated && (
           <main>
             <EmptyState onCreate={() => setShowNew(true)} onSample={loadSample} />
           </main>
@@ -1517,6 +1676,11 @@ export default function TripExpenseApp() {
             onClose={() => setSignInReason(null)}
             onSignedIn={() => setSignInReason(null)}
           />
+        </Modal>
+      )}
+      {orphans && orphans.length > 0 && (
+        <Modal onClose={declineOrphans} labelledBy="adopt-title" width="max-w-md">
+          <AdoptPrompt count={orphans.length} onAdopt={adoptOrphans} onDismiss={declineOrphans} />
         </Modal>
       )}
       {current && pendingRemoval && (
