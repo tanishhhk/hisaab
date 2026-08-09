@@ -58,20 +58,43 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
     setStep('code');
   };
 
+  // Supabase issues the token under one of two types and does not tell the
+  // client which. A returning address gets `email`; a first-time address, which
+  // signInWithOtp creates because shouldCreateUser is on, gets `signup`. The
+  // digits look identical either way, so the only way to know is to try.
+  //
+  // Ordered `email` first because that is the common case once someone has an
+  // account, and a wrong type fails cleanly rather than consuming the token.
   const verify = async () => {
     const digits = code.replace(/\D/g, '');
     if (digits.length !== 6) return setError('The code is six digits.');
     if (!supabase) return setError('Sign in is not available right now.');
     setBusy(true);
     setError('');
-    const { error: err } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: digits,
-      type: 'email',
-    });
+
+    let lastError = null;
+    for (const type of ['email', 'signup'] as const) {
+      const { error: err } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: digits,
+        type,
+      });
+      if (!err) {
+        setBusy(false);
+        onSignedIn();
+        return;
+      }
+      lastError = err;
+    }
+
     setBusy(false);
-    if (err) return setError('That code did not work. Check it, or send a new one.');
-    onSignedIn();
+    // Expiry is worth naming separately: the code is right, it is just old, and
+    // the recovery is different from retyping it.
+    setError(
+      /expired/i.test(lastError?.message ?? '')
+        ? 'That code has expired. Send a new one.'
+        : 'That code did not work. Check it, or send a new one.'
+    );
   };
 
   const field =

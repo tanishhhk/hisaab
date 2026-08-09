@@ -15,7 +15,13 @@ export const supabase: SupabaseClient | null =
         auth: {
           persistSession: true,
           autoRefreshToken: true,
-          detectSessionInUrl: false,
+          // Hisaab asks for a six digit code, so the code flow is the one the
+          // interface is built around. This stays on anyway: Supabase sends a
+          // link as well as a token, and whether the person receives one or
+          // the other is decided by the email template, not by this client.
+          // With it off, someone who clicked the link landed on the site and
+          // nothing happened, which looks exactly like a broken sign-in.
+          detectSessionInUrl: true,
         },
       })
     : null;
