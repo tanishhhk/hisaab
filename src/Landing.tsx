@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useSpring, useTransform, useReducedMotion } from 'framer-motion';
+import Lenis from 'lenis';
 import ThemeToggle from './ThemeToggle';
 
 // The argument this page makes, in order:
@@ -109,18 +110,20 @@ const inr = (n: number) =>
   n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // One restaurant bill, itemised, because the argument this section settles is
-// about specific dishes. Tax is 5% of each group's own food, which is the whole
-// point: it follows what was ordered, not how many people sat down.
-// 380+280+240 = 900, 640+420+140 = 1200, so 2,100 food and 105.00 tax.
+// about specific dishes. Food follows who ordered it; tax is the one line
+// nobody can attribute, so it is charged once and split evenly across all five.
+//   380+280+240 = 900,  ÷2 = 450.00
+//   640+420+140 = 1200, ÷3 = 400.00
+//   tax 105 ÷ 5 = 21.00, so 471.00 and 421.00
+//   2×471 + 3×421 = 2,205.00, exactly the bill.
 const BILL: {
   who: string;
   ate: string;
   items: [string, string][];
   food: string;
-  tax: string;
-  sum: string;
   by: number;
   each: string;
+  total: string;
 }[] = [
   {
     who: 'Asha and Divya',
@@ -131,10 +134,9 @@ const BILL: {
       ['Jeera rice', '240.00'],
     ],
     food: '900.00',
-    tax: '45.00',
-    sum: '945.00',
     by: 2,
-    each: '472.50',
+    each: '450.00',
+    total: '471.00',
   },
   {
     who: 'Rohan, Bilal and Chetan',
@@ -145,10 +147,51 @@ const BILL: {
       ['Butter naan', '140.00'],
     ],
     food: '1,200.00',
-    tax: '60.00',
-    sum: '1,260.00',
     by: 3,
-    each: '420.00',
+    each: '400.00',
+    total: '421.00',
+  },
+];
+
+// The six proofs, each with a mark drawn on the same 24 grid at the same 1.75
+// stroke weight as the category icons in the app. One authored set, so the
+// marketing page and the product look like the same piece of software.
+const PROOFS: { title: string; body: string; icon: string }[] = [
+  {
+    title: 'Nothing goes missing in the rounding',
+    body: 'Shares are worked out in paise and the odd remainder is handed out one at a time, so ₹100 across three people is 33.34 plus 33.33 plus 33.33, never ₹99.99.',
+    // A coin, with the odd paisa marked off to one side.
+    icon: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 8v8M9.5 10.2a2.2 2.2 0 0 1 5 0M9.5 13.8a2.2 2.2 0 0 0 5 0',
+  },
+  {
+    title: 'The fewest transfers',
+    body: 'Rather than everyone paying everyone, the whole trip collapses into the shortest list of payments that clears the group.',
+    // Many strands converging into one arrow.
+    icon: 'M3 6h5c2 0 3 2 5 2M3 12h10M3 18h5c2 0 3-2 5-2M13 12h7M17 8l4 4-4 4',
+  },
+  {
+    title: 'People change mid-trip',
+    body: 'Someone leaves early? Redistribute their share across who remains, or keep the history exactly as it was recorded.',
+    // Two figures kept, one stepping out.
+    icon: 'M4 20v-1.5a3.5 3.5 0 0 1 3.5-3.5h1A3.5 3.5 0 0 1 12 18.5V20M8 7.5a2.75 2.75 0 1 0 0 5.5 2.75 2.75 0 0 0 0-5.5M16 12h5M19 9.5 21.5 12 19 14.5',
+  },
+  {
+    title: 'Leaves with your data',
+    body: 'Export the whole trip to CSV or Excel, with a row per person per expense and a summary that reconciles.',
+    // A sheet with an arrow leaving it.
+    icon: 'M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9M14 3l4 4M14 3v3.5a.5.5 0 0 0 .5.5H18M9 17h6M9 13h3',
+  },
+  {
+    title: 'Works with no signal',
+    body: 'It runs entirely in your browser, and installs to your phone. On a bus, in a hill station, on aeroplane mode.',
+    // A phone, with the signal arcs struck through.
+    icon: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1M10.5 17.5h3M4 4l16 16',
+  },
+  {
+    title: 'It checks your maths',
+    body: 'Type the amounts by hand and Hisaab tells you how far off the total you are, and in which direction, before it accepts them.',
+    // A balance scale, level.
+    icon: 'M12 4v16M8 20h8M4 8h16M4 8l-2 5a2.5 2.5 0 0 0 4 0zM20 8l2 5a2.5 2.5 0 0 1-4 0zM12 5.5 8 8M12 5.5 16 8',
   },
 ];
 
@@ -342,6 +385,35 @@ function Feedback() {
 // Edge fire beforeinstallprompt when the app qualifies; we hold that event and
 // spend it on a real button. iOS Safari never fires it, so that case falls back
 // to naming the actual gesture rather than pretending a button exists.
+// Smooth scrolling for the page. Lenis drives the real window scroll rather
+// than a transformed container, so useScroll, sticky positioning and anchor
+// links all keep working. Off entirely when the visitor asked for less motion,
+// since easing their scroll is exactly the kind of thing that setting means.
+function useSmoothScroll(enabled: boolean) {
+  React.useEffect(() => {
+    if (!enabled) return;
+    const lenis = new Lenis({
+      duration: 1.05,
+      // Exponential ease-out: fast to start, long quiet tail.
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      // Touch devices already have momentum scrolling that feels native.
+      // Doubling it up fights the platform.
+      smoothWheel: true,
+      syncTouch: false,
+    });
+    let frame = 0;
+    const raf = (time: number) => {
+      lenis.raf(time);
+      frame = requestAnimationFrame(raf);
+    };
+    frame = requestAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(frame);
+      lenis.destroy();
+    };
+  }, [enabled]);
+}
+
 // Matches the lg: breakpoint the layout classes use, so the motion and the
 // grid agree about which arrangement is on screen.
 function useWide(): boolean {
@@ -487,6 +559,7 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
   // opacity is driven by a scroll range that no longer exists.
   const wide = useWide();
   const still = reduce || !wide ? {} : undefined;
+  useSmoothScroll(!reduce);
 
   return (
     <div className="ledger-ground min-h-screen bg-canvas text-ink">
@@ -506,7 +579,7 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             onClick={onStart}
             className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
           >
-            Open Hisaab
+            Open the app
           </button>
         </div>
       </header>
@@ -533,27 +606,29 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           className="mt-6 max-w-[52ch] text-lg leading-relaxed text-ink-muted"
         >
           Everyone paid for something. Nobody agrees on what. Hisaab works it
-          out and clears the whole group in the fewest payments possible —
-          exact to the last paisa.
+          out and clears the whole group in the fewest payments possible, exact
+          to the last paisa.
         </motion.p>
 
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-8 flex flex-wrap items-center gap-3"
+          className="mt-8 flex items-center gap-2.5 sm:gap-3"
         >
+          {/* One row at every width. Wrapped, the second button dropped under
+              the first and the pair stopped reading as a choice. */}
           <button
             onClick={onStart}
-            className="rounded-full bg-ink px-6 py-3 font-medium text-canvas transition-colors hover:bg-ink/88"
+            className="whitespace-nowrap rounded-full bg-ink px-5 py-3 text-[0.95rem] font-medium text-canvas transition-colors hover:bg-ink/88 sm:px-6 sm:text-base"
           >
             Start a trip
           </button>
           <button
             onClick={onSample}
-            className="rounded-full border border-rule-strong px-6 py-3 font-medium transition-colors hover:bg-sunken"
+            className="whitespace-nowrap rounded-full border border-rule-strong px-5 py-3 text-[0.95rem] font-medium transition-colors hover:bg-sunken sm:px-6 sm:text-base"
           >
-            Open a worked example
+            See a worked example
           </button>
         </motion.div>
 
@@ -590,9 +665,13 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                 hard bit. It is the reconstruction, from memory, in a chat where
                 half the payments were never mentioned.
               </p>
+              {/* Wide, this line is scrubbed in by the same scroll that fades
+                  the chat out. Stacked, it would otherwise sit under the intro
+                  and give away the answer before the reader has seen the mess,
+                  so on a phone it moves down next to the settlement card. */}
               <motion.p
                 style={still ?? { opacity: answerOpacity }}
-                className="mt-8 max-w-[46ch] text-lg font-medium"
+                className="mt-8 hidden max-w-[46ch] text-lg font-medium lg:block"
               >
                 Hisaab reduces it to three payments.
               </motion.p>
@@ -604,9 +683,13 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                 and centring a 12-message thread in a fixed-height cell made it
                 bleed upward over the paragraph. */}
             <div className="relative flex flex-col gap-8 lg:grid lg:h-[58vh] lg:min-h-[400px] lg:place-items-center lg:gap-0">
+              {/* data-lenis-prevent hands this element's wheel and touch back
+                  to the browser, so scrolling inside the thread does not also
+                  drive the smoothed page scroll. */}
               <motion.div
                 style={still ?? { y: chatY, opacity: chatOpacity, filter: chatBlur }}
-                className="chat-fade w-full space-y-2 overflow-hidden lg:col-start-1 lg:row-start-1 lg:self-center"
+                data-lenis-prevent
+                className="chat-fade w-full space-y-2 overflow-y-auto overscroll-contain lg:overflow-hidden lg:col-start-1 lg:row-start-1 lg:self-center"
                 aria-hidden
               >
                 {CHAT.map((c, i) => (
@@ -614,8 +697,24 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                 ))}
               </motion.div>
 
+              {/* The phone's version of the turn: the line and the card arrive
+                  together, once the reader has actually scrolled past the mess. */}
+              <motion.p
+                initial={reduce ? false : { opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-90px' }}
+                transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                className="text-lg font-medium lg:hidden"
+              >
+                Hisaab reduces it to three payments.
+              </motion.p>
+
               <motion.div
                 style={still ?? { opacity: answerOpacity, y: answerY, scale: answerScale }}
+                initial={wide || reduce ? false : { opacity: 0, y: 14 }}
+                whileInView={wide || reduce ? undefined : { opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-80px' }}
+                transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full lg:col-start-1 lg:row-start-1 lg:self-center"
               >
                 <div className="rounded-2xl border border-rule bg-surface p-6">
@@ -655,8 +754,9 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
         </h2>
         <p className="mt-5 max-w-[52ch] text-lg text-ink-muted">
           Not everything divides by the number of people at the table. The two
-          who ate vegetarian pay for what they ordered, the tax follows the food
-          rather than the headcount, and each group splits its own total.
+          who ate vegetarian pay for what they ordered, the three who had the
+          biryani pay for that, and the tax, which belongs to no dish in
+          particular, is the one line that does split evenly.
         </p>
 
         <motion.div
@@ -692,15 +792,10 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                       <span className="tnum shrink-0 text-ink">{price}</span>
                     </div>
                   ))}
-                  <div className="flex items-baseline pt-1.5 text-ink-subtle">
-                    <span>Tax at 5%</span>
-                    <Leader />
-                    <span className="tnum shrink-0">{g.tax}</span>
-                  </div>
                   <div className="flex items-baseline border-t border-rule pt-2 font-medium">
-                    <span>Their share of the bill</span>
+                    <span>What they ordered</span>
                     <Leader />
-                    <span className="tnum shrink-0">{g.sum}</span>
+                    <span className="tnum shrink-0">{g.food}</span>
                   </div>
                 </div>
 
@@ -708,7 +803,7 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                     divided. Tinted rather than boxed so it reads as a note in
                     the margin instead of a second card. */}
                 <div className="mt-3.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl bg-accent/[0.07] px-3.5 py-2.5 text-[0.95rem] tnum">
-                  <span className="text-ink-muted">&#8377;{g.sum} between {g.by}</span>
+                  <span className="text-ink-muted">&#8377;{g.food} between {g.by}</span>
                   <span className="flex items-baseline gap-2 whitespace-nowrap">
                     <span className="text-ink-subtle">=</span>
                     <span className="font-display text-2xl tracking-tight text-ink">
@@ -727,11 +822,17 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
               <Leader />
               <span className="tnum shrink-0">2,100.00</span>
             </div>
+            {/* Tax is charged once, on the whole table, and is the one line
+                nobody can attribute to a dish. So it is the one line that does
+                divide by the headcount. */}
             <div className="mt-1.5 flex items-baseline text-ink-muted">
               <span>Tax</span>
               <Leader />
               <span className="tnum shrink-0">105.00</span>
             </div>
+            <p className="mt-1 text-xs text-ink-subtle tnum">
+              Split five ways, &#8377;21.00 each
+            </p>
             {/* The double rule above a total is the one typographic convention
                 every printed bill shares. */}
             <div className="mt-3 flex items-baseline border-t-[3px] border-double border-ink/25 pt-3">
@@ -743,7 +844,8 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             </div>
             <p className="mt-4 text-sm leading-relaxed text-ink-muted">
               <span className="tnum">
-                Two at &#8377;472.50 and three at &#8377;420.00 comes to &#8377;2,205.00.
+                Food and tax together: two at &#8377;471.00 and three at &#8377;421.00
+                comes to &#8377;2,205.00.
               </span>{' '}
               Exactly the bill. Nobody subsidised the biryani.
             </p>
@@ -762,24 +864,32 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             proof gets a rule and real breathing room. The dividers disappear
             once the grid has columns to do that work instead. */}
         <div className="mt-9 grid divide-y divide-rule sm:grid-cols-2 sm:gap-x-10 sm:gap-y-9 sm:divide-y-0 lg:grid-cols-3">
-          {[
-            ['Nothing goes missing in the rounding', 'Shares are worked out in paise and the odd remainder is handed out one at a time, so ₹100 across three people is 33.34 plus 33.33 plus 33.33, never ₹99.99.'],
-            ['The fewest transfers', 'Rather than everyone paying everyone, the whole trip collapses into the shortest list of payments that clears the group.'],
-            ['People change mid-trip', 'Someone leaves early? Redistribute their share across who remains, or keep the history exactly as it was recorded.'],
-            ['Leaves with your data', 'Export the whole trip to CSV or Excel, with a row per person per expense and a summary that reconciles.'],
-            ['Works with no signal', 'It runs entirely in your browser, and installs to your phone. On a bus, in a hill station, on aeroplane mode.'],
-            ['It checks your maths', 'Type the amounts by hand and Hisaab tells you how far off the total you are, and in which direction, before it accepts them.'],
-          ].map(([title, body]) => (
+          {PROOFS.map(({ title, body, icon }) => (
             <motion.div
               key={title}
               initial={reduce ? false : { opacity: 0, y: 14 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-80px' }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="py-7 first:pt-0 sm:py-0"
+              className="flex gap-4 py-7 first:pt-0 sm:block sm:py-0"
             >
+              {/* Drawn on the same 24 grid at the same 1.75 stroke as the
+                  category icons inside the app, so the two sets read as one
+                  hand. On a phone the mark sits beside the text and gives the
+                  column something to scan down; above it once there are real
+                  columns doing that work. */}
+              <span
+                aria-hidden
+                className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/[0.09] text-accent sm:mb-3.5 sm:h-11 sm:w-11"
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+                  <path d={icon} stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <div>
               <h3 className="font-display text-xl font-semibold tracking-tight sm:text-lg">{title}</h3>
               <p className="mt-2 max-w-[42ch] text-[0.95rem] leading-relaxed text-ink-muted">{body}</p>
+              </div>
             </motion.div>
           ))}
         </div>

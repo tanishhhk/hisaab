@@ -18,7 +18,7 @@ export default function SyncStatus({
     local: 'Saved in this browser. It will not follow you to another device.',
     saving: 'Saving…',
     synced: 'Synced to your account.',
-    offline: 'Offline — your changes will sync when you reconnect.',
+    offline: 'Offline. Your changes will sync when you reconnect.',
     error: 'Could not save.',
     auth: 'Your session expired.',
   };

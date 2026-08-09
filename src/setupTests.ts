@@ -20,6 +20,15 @@ if (!window.matchMedia) {
   }) as MediaQueryList;
 }
 
+// Lenis measures the document with ResizeObserver, which jsdom also lacks.
+if (!(window as any).ResizeObserver) {
+  (window as any).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 if (!(window as any).IntersectionObserver) {
   (window as any).IntersectionObserver = class {
     observe() {}

@@ -163,6 +163,21 @@ body {
   .ledger-ground::after { display: none; }
 }
 
+/* The app resolving into place after the landing, rather than replacing it
+   between one frame and the next. */
+@keyframes app-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.app-enter {
+  animation: app-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-enter { animation: none; }
+}
+
 /* Stacked, the thread has to be cut off somewhere. Clipping it with a fade
    rather than deleting messages keeps the point of the scene — that the chat
    goes on and on — while giving the answer below it room to arrive. */

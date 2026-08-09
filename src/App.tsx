@@ -1280,7 +1280,7 @@ export default function TripExpenseApp() {
     setOpenTripId(t.id);
   };
 
-  // Offer to adopt anonymous trips, but only once the pull has settled — the
+  // Offer to adopt anonymous trips, but only once the pull has settled. The
   // anonymous store is never modified, so declining costs nothing.
   useEffect(() => {
     const me = user?.id;
@@ -1329,6 +1329,14 @@ export default function TripExpenseApp() {
     setTrips([]);
   };
 
+  // Crossing between the landing and the app kept the window's scroll offset,
+  // so leaving from halfway down the landing dropped you halfway down the app.
+  // That is what made the change feel like a different page appearing behind
+  // this one. Reset on every crossing, in both directions.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, [seenLanding]);
+
   if (!seenLanding) {
     return (
       <>
@@ -1354,7 +1362,9 @@ export default function TripExpenseApp() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas p-6 font-sans">
+    // A short fade on arrival, so the app resolves into place instead of
+    // replacing the landing between one frame and the next.
+    <div className="app-enter min-h-screen bg-canvas p-6 font-sans">
       <div className="max-w-6xl mx-auto">
         <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
@@ -1431,7 +1441,7 @@ export default function TripExpenseApp() {
 
         {/* hydrated is required, not implied by the two flags above. For the
             first 200ms of a pull the skeleton is deliberately suppressed, and
-            without this guard that window would render EmptyState — telling
+            without this guard that window would render EmptyState, telling
             someone with cloud trips that they have none, which invites a
             duplicate. Rendering nothing briefly is the honest answer when the
             answer is not yet known. */}
