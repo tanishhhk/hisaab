@@ -106,10 +106,14 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
         <h3 id="signin-title" className="font-display text-xl tracking-tight">
           {step === 'email' ? 'Sign in to Hisaab' : 'Check your email'}
         </h3>
+        {/* Supabase mints a link and a code on every request, and which one
+            lands in the inbox is decided by the email template rather than by
+            this app. Naming both keeps the screen honest under either setting,
+            and means switching the template later needs no change here. */}
         <p className="mt-1 text-sm text-ink-muted">
           {step === 'email'
-            ? reason || 'We will email you a six digit code. No password to remember.'
-            : `We sent a six digit code to ${email.trim()}. It expires in an hour.`}
+            ? reason || 'We will email you a link to tap, or a code to type. No password to remember.'
+            : `Sent to ${email.trim()}. Tap the link in it, or type the code below if that is what arrived. Either expires in an hour.`}
         </p>
       </div>
 
@@ -140,7 +144,7 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
               disabled={busy}
               className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88 disabled:opacity-60"
             >
-              {busy ? 'Sending' : 'Send me a code'}
+              {busy ? 'Sending' : 'Email me'}
             </button>
           </div>
         </>
@@ -159,6 +163,11 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
             className={`${field} tnum text-center text-lg tracking-[0.4em] ${error ? 'border-debit' : 'border-rule'}`}
           />
           {error && <p role="alert" className="text-sm text-debit">{error}</p>}
+          {/* The link route needs no input at all, so the code field must not
+              look like the only way through. */}
+          <p className="text-xs text-ink-subtle">
+            Tapped the link instead? You are already signed in. Close this.
+          </p>
           <div className="flex items-center justify-between gap-2">
             <button
               onClick={() => { setStep('email'); setCode(''); setError(''); }}
