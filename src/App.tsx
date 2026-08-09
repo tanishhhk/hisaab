@@ -18,6 +18,10 @@ export interface Member {
   // ledger after removal. Absent means active, so trips saved before this
   // field existed keep working without migration.
   active?: boolean;
+  // The server's stamp for this member alone. Sync merges members one at a
+  // time, so each carries its own last-write mark rather than the trip's.
+  // Absent means never synced.
+  updatedAt?: string;
 }
 
 export interface Split {
@@ -39,6 +43,10 @@ export interface Expense {
   splits: Split[];
   category: string;
   date: string;
+  // As with Member: this expense's own server stamp. Two people adding
+  // different expenses must not overwrite each other, so the merge happens
+  // per expense and needs a per-expense mark.
+  updatedAt?: string;
 }
 
 export interface Trip {
