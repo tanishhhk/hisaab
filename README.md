@@ -1,7 +1,7 @@
 # Hisaab
 
 Everyone paid for something. Nobody agrees on what. Hisaab works it out and
-clears the whole group in the fewest payments possible — exact to the last
+clears the whole group in the fewest payments possible, exact to the last
 paisa.
 
 A shared-expense tracker for trips, built for the part everyone dreads: the
@@ -12,7 +12,7 @@ settling up.
 ## What it does
 
 **Splits that add up.** Shares are worked out in paise and the odd remainder is
-handed out one at a time, so ₹100 across three people is 33.34 + 33.33 + 33.33 —
+handed out one at a time, so ₹100 across three people is 33.34 + 33.33 + 33.33,
 never ₹99.99. Amounts are stored as exact decimals end to end, never as floats.
 
 **Uneven splits.** Three ate the biryani, two didn't. Enter the amounts by hand
@@ -25,7 +25,7 @@ both, and the ledger credits each of them.
 **The fewest transfers.** Rather than everyone paying everyone, the whole trip
 collapses into the shortest list of payments that clears the group.
 
-**People change mid-trip.** Someone leaves early — redistribute their share
+**People change mid-trip.** Someone leaves early? Redistribute their share
 across whoever remains, or keep the history exactly as recorded. Members are
 retired rather than deleted, so their past payments stay in the ledger.
 
@@ -41,7 +41,7 @@ and opens like an app.
 ## Roadmap
 
 Native iOS and Android builds are planned, for the App Store and Google Play.
-The web app is the reference implementation and will stay free.
+The web app implementation and will stay free.
 
 ---
 
@@ -73,7 +73,7 @@ REACT_APP_SUPABASE_URL=https://your-project.supabase.co
 REACT_APP_SUPABASE_ANON_KEY=your-anon-public-key
 ```
 
-Use the **anon public** key, never the `service_role` key — that one bypasses
+Use the **anon public** key, never the `service_role` key. That one bypasses
 every database rule. `.env` is gitignored.
 
 Then apply the migrations in order, via the Supabase dashboard's SQL Editor:
@@ -137,8 +137,8 @@ npm run build                    # production build
 ```
 
 The suite runs with Supabase disabled via `.env.test`, so it is deterministic
-and makes no network calls. The arithmetic — allocation, settlement, member
-removal, row translation, conflict resolution — is pure and tested directly.
+and makes no network calls. The arithmetic (allocation, settlement, member
+removal, row translation, conflict resolution) is pure and tested directly.
 
 ---
 
@@ -166,4 +166,4 @@ supabase/
 
 ## Author
 
-Tanishk — [github.com/tanishhhk](https://github.com/tanishhhk)
+Tanishk Jain. [github.com/tanishhhk](https://github.com/tanishhhk)
