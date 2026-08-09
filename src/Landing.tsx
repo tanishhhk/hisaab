@@ -124,7 +124,7 @@ const BILL: {
 }[] = [
   {
     who: 'Asha and Divya',
-    ate: 'ate vegetarian',
+    ate: 'veg',
     items: [
       ['Paneer tikka', '380.00'],
       ['Dal makhani', '280.00'],
@@ -137,7 +137,7 @@ const BILL: {
   },
   {
     who: 'Rohan, Bilal and Chetan',
-    ate: 'had the biryani and the fish',
+    ate: 'non-veg',
     items: [
       ['Hyderabadi biryani', '640.00'],
       ['Fish curry', '420.00'],
@@ -434,7 +434,7 @@ function InstallBand() {
   const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   return (
-    <section className="border-y border-rule bg-sunken">
+    <section id="install" className="border-y border-rule bg-sunken">
       {/* The arrow tile and the wordmark were saying "Hisaab" a third time on a
           page that has it in the header and the footer. Dropped, and the line
           carries the band on its own. */}
@@ -655,7 +655,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
   // content. Without this the answer card stays at opacity 0, because its
   // opacity is driven by a scroll range that no longer exists.
   const wide = useWide();
-  const still = reduce || !wide ? {} : undefined;
+  const still = reduce ? {} : undefined;
   useSmoothScroll(!reduce);
 
   return (
@@ -746,8 +746,8 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
       </section>
 
       {/* The turn. One long scroll in which the mess is replaced by the answer. */}
-      <section ref={turnRef} className="relative lg:h-[220vh] mt-[15vh] lg:mt-[20vh] mb-[15vh] lg:mb-0">
-        <div className="lg:sticky top-16 lg:top-24 overflow-hidden">
+      <section id="chat" ref={turnRef} className="relative h-[250vh] lg:h-[220vh] mt-[15vh] lg:mt-[20vh] mb-[15vh] lg:mb-0">
+        <div className="sticky top-16 lg:top-24 overflow-hidden">
           <div className="mx-auto grid w-full max-w-7xl gap-10 px-6 lg:grid-cols-2 lg:items-start">
             <div>
               <h2 className="max-w-[15ch] font-display text-[clamp(1.9rem,4.4vw,3.25rem)] font-semibold leading-[1.02] tracking-tighter">
@@ -759,22 +759,32 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
               </p>
             </div>
 
-            <div className="relative lg:h-[62vh] min-h-[420px]">
-              <motion.div
-                style={still ?? { y: chatY, opacity: chatOpacity, filter: chatBlur }}
-                className="w-full lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-0 space-y-2 overflow-hidden pr-1 mb-8 lg:mb-0"
-                aria-hidden
+            <div className="relative h-[75vh] lg:h-[70vh] min-h-[550px] flex justify-center lg:justify-start">
+              <motion.div 
+                style={still ?? { opacity: chatOpacity, filter: chatBlur }}
+                className="relative w-full max-w-[320px] h-[650px] lg:h-auto lg:aspect-[9/19] rounded-[3rem] border-[12px] border-[#1a1a1a] dark:border-[#0a0a0a] bg-[#f8f9fa] dark:bg-[#111111] overflow-hidden ring-1 ring-white/10 shadow-2xl"
               >
-                {CHAT.map((c, i) => (
-                  <ChatBubble key={i} {...c} />
-                ))}
+                {/* iPhone Notch */}
+                <div className="absolute top-0 inset-x-0 h-6 flex justify-center z-20 pointer-events-none">
+                  <div className="w-[120px] h-full bg-[#1a1a1a] dark:bg-[#0a0a0a] rounded-b-3xl" />
+                </div>
+                
+                <motion.div
+                  style={still ?? { y: chatY }}
+                  className="absolute inset-0 pt-12 px-4 pb-8 space-y-2 overflow-hidden"
+                  aria-hidden
+                >
+                  {CHAT.map((c, i) => (
+                    <ChatBubble key={i} {...c} />
+                  ))}
+                </motion.div>
               </motion.div>
 
               <motion.div
                 style={still ?? { opacity: answerOpacity, y: answerY, scale: answerScale }}
-                className="w-full lg:absolute lg:inset-x-0 lg:top-0"
+                className="w-full absolute inset-x-0 top-12 px-4 lg:px-0 lg:pr-1"
               >
-                <div className="rounded-[1.25rem] border border-rule bg-surface shadow-2xl shadow-credit/20 overflow-hidden ring-1 ring-credit/10">
+                    <div className="rounded-[1.25rem] border border-rule bg-surface shadow-2xl shadow-credit/20 overflow-hidden ring-1 ring-credit/10">
                   <div className="bg-credit px-6 py-5">
                     <h3 className="font-display text-xl font-semibold tracking-tight text-surface">
                       Hisaab reduces it to three payments.
@@ -814,7 +824,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
 
       {/* The claim, then the proof. A real bill, split the awkward way, with
           the arithmetic shown rather than asserted. */}
-      <section className="mx-auto max-w-7xl px-6 pt-16 pb-24">
+      <section id="bill" className="mx-auto max-w-7xl px-6 pt-16 pb-24">
         <div className="lg:grid lg:grid-cols-2 lg:items-center lg:gap-12">
           <div>
             <h2 className="max-w-[18ch] font-display text-[clamp(1.75rem,4vw,2.75rem)] font-semibold leading-[1.05] tracking-tighter">
@@ -829,93 +839,94 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
           </div>
 
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={reduce ? false : { opacity: 0, y: 16, rotate: 0 }}
+            whileInView={{ opacity: 1, y: 0, rotate: -1.5 }}
             viewport={{ once: true, margin: '-100px' }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-12 lg:mt-0 w-full max-w-[34rem] lg:mx-auto overflow-hidden rounded-2xl border border-rule bg-surface"
+            className="mt-12 lg:mt-0 w-full max-w-[26rem] lg:mx-auto text-[#111] font-mono text-[0.9rem] leading-relaxed relative drop-shadow-2xl"
           >
-          {/* Set as the bill itself: centred header, leader dots, figures in a
-              right-aligned tabular column, a double rule above the total. The
-              annotations are the only thing a paper bill would not have. */}
-          <div className="border-b border-dashed border-rule px-6 py-6 text-center sm:px-8">
-            <h3 className="font-display text-lg tracking-[0.2em] uppercase">One dinner bill</h3>
-            <p className="mt-1.5 text-xs uppercase tracking-[0.18em] text-ink-subtle">
-              Table 7 · Five covers
-            </p>
-          </div>
+            {/* Top jagged edge */}
+            <div className="h-2 w-full" style={{ background: 'radial-gradient(circle at 50% 0, transparent 4px, #fdfbf7 4.5px)', backgroundSize: '10px 10px', backgroundRepeat: 'repeat-x' }}></div>
+            
+            <div className="bg-[#fdfbf7] px-6 sm:px-8 pt-8 pb-4">
+              {/* Header */}
+              <div className="border-b-2 border-dashed border-[#ccc] pb-6 text-center">
+                <h3 className="text-xl font-bold tracking-[0.15em] uppercase">Guest Receipt</h3>
+                <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">
+                  Table 7 · 5 Guests
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">
+                  {new Date().toLocaleDateString()}
+                </p>
+              </div>
 
-          <div className="divide-y divide-dashed divide-rule">
-            {BILL.map((g) => (
-              <div key={g.who} className="px-6 py-6 sm:px-8">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium">{g.who}</span>
-                  <span className="text-sm text-ink-subtle">{g.ate}</span>
-                </div>
-
-                <div className="mt-3.5 space-y-1.5 text-[0.95rem]">
-                  {g.items.map(([dish, price]) => (
-                    <div key={dish} className="flex items-baseline">
-                      <span className="text-ink-muted">{dish}</span>
-                      <Leader />
-                      <span className="tnum shrink-0 text-ink">{price}</span>
+              {/* Items */}
+              <div className="divide-y-2 divide-dashed divide-[#ccc]">
+                {BILL.map((g) => (
+                  <div key={g.who} className="py-6">
+                    <div className="font-bold uppercase text-[0.8rem] mb-3 text-[#111]">
+                      {g.who} <span className="lowercase text-[#666] font-normal">({g.ate})</span>
                     </div>
-                  ))}
-                  <div className="flex items-baseline border-t border-rule pt-2 font-medium">
-                    <span>What they ordered</span>
-                    <Leader />
-                    <span className="tnum shrink-0">{g.food}</span>
+
+                    <div className="space-y-1">
+                      {g.items.map(([dish, price]) => (
+                        <div key={dish} className="flex justify-between">
+                          <span className="uppercase text-[#333]">{dish}</span>
+                          <span className="text-[#111]">{price}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Math Explanation as a handwritten note */}
+                    <div className="mt-5 relative z-10 max-w-[90%] ml-auto">
+                      <div className="absolute inset-0 bg-[#fef08a] transform -skew-x-12 -rotate-2 rounded-sm opacity-60"></div>
+                      <div className="relative px-3 py-2 font-sans text-xs text-[#b91c1c] font-medium flex justify-between items-end">
+                         <span className="flex flex-col">
+                           <span className="uppercase tracking-wider text-[#991b1b] text-[10px] mb-0.5">Who pays?</span>
+                           <span>₹{g.food} split by {g.by}</span>
+                         </span>
+                         <span className="text-lg font-bold tracking-tight">₹{g.each} <span className="text-[10px] font-normal opacity-80">each</span></span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Total Footer */}
+              <div className="border-t-2 border-dashed border-[#ccc] pt-6">
+                <div className="flex justify-between mb-1 text-[#333] uppercase">
+                  <span>Food Subtotal</span>
+                  <span>2,100.00</span>
+                </div>
+                <div className="flex justify-between mb-1 text-[#333] uppercase items-center relative">
+                  <span>Tax (5%)</span>
+                  <span>105.00</span>
+                </div>
+                
+                {/* Tax Note */}
+                <div className="relative z-10 mb-5 max-w-[160px] ml-auto">
+                  <div className="absolute inset-0 bg-[#fef08a] transform skew-x-12 rotate-1 rounded-sm opacity-60"></div>
+                  <div className="relative px-2 py-1 font-sans text-[11px] text-[#b91c1c] font-medium text-right">
+                     Split 5 ways = ₹21.00 each
                   </div>
                 </div>
 
-                {/* The annotation a paper bill cannot make: the same figure,
-                    divided. Tinted rather than boxed so it reads as a note in
-                    the margin instead of a second card. */}
-                <div className="mt-3.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl bg-accent/[0.07] px-3.5 py-2.5 text-[0.95rem] tnum">
-                  <span className="text-ink-muted">&#8377;{g.food} between {g.by}</span>
-                  <span className="flex items-baseline gap-2 whitespace-nowrap">
-                    <span className="text-ink-subtle">=</span>
-                    <span className="font-display text-2xl tracking-tight text-ink">
-                      &#8377;{g.each}
-                    </span>
-                    <span className="text-ink-subtle">each</span>
-                  </span>
+                <div className="flex items-end justify-between font-bold border-t-2 border-[#111] pt-3 mt-1">
+                  <span className="text-lg uppercase">Total</span>
+                  <span className="text-2xl tracking-tighter">₹2,205.00</span>
+                </div>
+
+                <div className="mt-8 text-center text-[#555] text-[10px] uppercase space-y-1 opacity-80 font-sans tracking-wide pb-4">
+                  <p>Math perfectly matches bill.</p>
+                  <p>No one subsidised the biryani.</p>
+                  <p className="mt-2 font-bold text-[#111] text-xs">Thank you!</p>
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div className="border-t border-dashed border-rule bg-sunken px-6 py-6 sm:px-8">
-            <div className="flex items-baseline text-ink-muted">
-              <span>Food</span>
-              <Leader />
-              <span className="tnum shrink-0">2,100.00</span>
             </div>
-            {/* Tax is charged once, on the whole table, and is the one line
-                nobody can attribute to a dish. So it is the one line that does
-                divide by the headcount. */}
-            <div className="mt-1.5 flex items-baseline text-ink-muted">
-              <span>Tax</span>
-              <Leader />
-              <span className="tnum shrink-0">105.00</span>
-            </div>
-            <p className="mt-1 text-xs text-ink-subtle tnum">
-              Split five ways, &#8377;21.00 each
-            </p>
-            {/* The double rule above a total is the one typographic convention
-                every printed bill shares. */}
-            <div className="mt-3 flex items-baseline border-t-[3px] border-double border-ink/25 pt-3">
-              <span className="font-display text-lg tracking-tight">Total</span>
-              <Leader />
-              <span className="tnum shrink-0 font-display text-2xl tracking-tight">
-                &#8377;2,205.00
-              </span>
-            </div>
-            <p className="mt-4 text-[0.95rem] leading-relaxed text-ink-muted">
-              The math perfectly matches the total bill. Vegetarians only paid for their food plus an equal share of the tax. No one subsidised the biryani.
-            </p>
-          </div>
-        </motion.div>
+            
+            {/* Bottom jagged edge */}
+            <div className="h-2 w-full" style={{ background: 'radial-gradient(circle at 50% 100%, transparent 4px, #fdfbf7 4.5px)', backgroundSize: '10px 10px', backgroundRepeat: 'repeat-x' }}></div>
+          </motion.div>
         </div>
         {/* A nod to the category, never a name. Set as a separator rather than
             a paragraph: rules running out to both edges, the line centred in
@@ -940,7 +951,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
         {/* Stacked on a phone these ran together as one grey column, so each
             proof gets a rule and real breathing room. The dividers disappear
             once the grid has columns to do that work instead. */}
-        <div className="mt-9 grid divide-y divide-rule sm:grid-cols-2 sm:gap-x-10 sm:gap-y-9 sm:divide-y-0 lg:grid-cols-3">
+        <div id="proof" className="scroll-mt-16 mt-9 grid divide-y divide-rule sm:grid-cols-2 sm:gap-x-10 sm:gap-y-9 sm:divide-y-0 lg:grid-cols-3">
           {PROOFS.map(({ title, body }) => (
             <motion.div
               key={title}
@@ -973,7 +984,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
         </div>
       </section>
 
-      <footer className="border-t border-rule">
+      <footer id="about" className="border-t border-rule">
         <div className="mx-auto grid max-w-7xl gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <h2 className="max-w-[20ch] font-display text-[clamp(1.5rem,3vw,2.1rem)] leading-[1.1] tracking-tighter">

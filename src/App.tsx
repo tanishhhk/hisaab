@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import * as htmlToImage from 'html-to-image';
 import Landing, { LoadingScreen } from './Landing';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
@@ -88,6 +89,7 @@ interface ExpenseFormProps {
   onUpdate?: (expense: Expense) => void;
   onCancel?: () => void;
   existingCategories?: string[];
+  tripName?: string;
 }
 
 interface ExpenseListProps {
@@ -698,7 +700,32 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
   );
 }
 
-function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, existingCategories = [] }: ExpenseFormProps) {
+const AVATAR_COLORS = [
+  'bg-red-500 text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-yellow-500 text-white',
+  'bg-purple-500 text-white',
+  'bg-pink-500 text-white',
+  'bg-indigo-500 text-white',
+  'bg-teal-500 text-white',
+  'bg-orange-500 text-white',
+  'bg-cyan-500 text-white',
+];
+
+export function getAvatarColor(id: string) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+export function getInitials(name: string) {
+  return name.slice(0, 2).toUpperCase();
+}
+
+function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, existingCategories = [], tripName }: ExpenseFormProps) {
   const [title, setTitle] = useState<string>('');
   const [payerId, setPayerId] = useState<string>('');
   const [total, setTotal] = useState<string>('');
@@ -707,10 +734,24 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
   const [selected, setSelected] = useState<string[]>(() => members.map((m: Member) => m.id));
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<ExpenseErrors>({});
-  // Off by default: one person paying is the common case and must stay a
-  // one-tap flow. Turning this on reveals an amount per member.
   const [splitPayment, setSplitPayment] = useState<boolean>(false);
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
+  const [showInvoice, setShowInvoice] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
+
+  const downloadReceipt = async () => {
+    if (receiptRef.current) {
+      try {
+        const dataUrl = await htmlToImage.toPng(receiptRef.current);
+        const link = document.createElement('a');
+        link.download = `receipt-${title.replace(/\s+/g, '-').toLowerCase() || 'expense'}.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error('Failed to generate receipt', err);
+      }
+    }
+  };
 
   // Key on the member IDs, not the array identity: the parent rebuilds
   // `members` on every render, so depending on [members] re-ran this (and wiped
@@ -833,24 +874,106 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
       />
       <FieldError id="expense-title-error" message={errors.title} />
       <div className="mb-2" />
-      <div className="mb-2 flex flex-wrap items-start gap-2">
-        <select 
-          value={payerId} 
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPayerId(e.target.value)} 
-          className="min-w-[9rem] flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule transition focus:border-accent"
-        >
-          {members.map((m: Member) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-        <input
-          value={total}
-          inputMode="decimal"
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTotal(e.target.value); clearError('total'); }}
-          placeholder="Total"
-          aria-invalid={!!errors.total}
-          aria-describedby={errors.total ? 'expense-total-error' : undefined}
-          className={`w-28 rounded-lg bg-surface p-2.5 text-sm tnum border transition ${errors.total ? 'border-debit' : 'border-rule focus:border-accent'}`}
-        />
-        <div className="flex-1 min-w-[8rem] relative">
+      <div className="mb-4">
+        <div className="flex justify-between items-center mb-2">
+          <div className="text-sm text-ink-muted">Who Paid?</div>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-ink-muted hover:text-ink transition-colors bg-surface px-3 py-1.5 rounded-lg border border-rule-strong hover:border-ink hover:bg-sunken">
+            <div className="relative flex items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={splitPayment}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setSplitPayment(e.target.checked);
+                  if (e.target.checked) {
+                    setPayerAmounts({ [payerId]: total });
+                  } else {
+                    setPayerAmounts({});
+                  }
+                  clearError('payers');
+                }}
+              />
+              <div className="w-4 h-4 border-2 border-rule-strong rounded-[4px] bg-surface peer-checked:bg-ink peer-checked:border-ink transition-all"></div>
+              <svg className="absolute inset-0 w-4 h-4 text-canvas opacity-0 peer-checked:opacity-100 scale-50 peer-checked:scale-100 transition-all duration-200 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            Multiple people paid
+          </label>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-2 pt-2 px-2 -mx-2 no-scrollbar">
+          {members.map(m => {
+            const isPayer = splitPayment ? (payerAmounts[m.id] !== undefined) : payerId === m.id;
+            return (
+              <button 
+                key={m.id}
+                type="button"
+                onClick={() => { 
+                  if (splitPayment) {
+                    setPayerAmounts(prev => {
+                      const next = { ...prev };
+                      if (next[m.id] !== undefined) {
+                        delete next[m.id];
+                        // if we unselected the last one, maybe select someone else? 
+                        // Let's just allow empty selection and show error.
+                      } else {
+                        next[m.id] = '';
+                      }
+                      return next;
+                    });
+                  } else {
+                    setPayerId(m.id); 
+                  }
+                  clearError('payers'); 
+                }}
+                className={`flex flex-col items-center gap-1 min-w-[3.5rem] transition-transform ${isPayer ? 'scale-110 drop-shadow-md' : 'opacity-60 hover:opacity-100 grayscale hover:grayscale-0'}`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow-inner ${getAvatarColor(m.id)} ${isPayer ? 'ring-2 ring-offset-2 ring-accent' : ''}`}>
+                  {getInitials(m.name)}
+                </div>
+                <span className="text-[10px] uppercase font-medium truncate max-w-full">{m.name}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-col md:flex-row items-start gap-4">
+        <div className="flex-1 w-full">
+          <input
+            value={total}
+            inputMode="decimal"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTotal(e.target.value); clearError('total'); }}
+            placeholder="Total Amount"
+            aria-invalid={!!errors.total}
+            aria-describedby={errors.total ? 'expense-total-error' : undefined}
+            className={`w-full text-2xl font-bold rounded-xl bg-surface px-4 py-3 tnum border transition ${errors.total ? 'border-debit' : 'border-rule focus:border-accent'}`}
+          />
+          <div className="flex gap-2 mt-2">
+             {['+100', '+500', '+1000'].map(val => (
+                <button
+                   key={val}
+                   type="button"
+                   onClick={() => {
+                      const cur = Number(total) || 0;
+                      setTotal(String(cur + Number(val.replace('+',''))));
+                      clearError('total');
+                   }}
+                   className="flex-1 py-2 rounded-lg border border-rule bg-surface text-xs font-medium hover:bg-sunken transition-colors"
+                >
+                   {val}
+                </button>
+             ))}
+             <button
+                type="button"
+                onClick={() => { setTotal(''); clearError('total'); }}
+                className="flex-1 py-2 rounded-lg border border-rule bg-surface text-xs font-medium text-debit hover:bg-debit-soft transition-colors"
+             >
+                Clear
+             </button>
+          </div>
+          <FieldError id="expense-total-error" message={errors.total} />
+        </div>
+        
+        <div className="flex-1 w-full relative">
           <input
             list="category-options"
             value={category}
@@ -860,15 +983,14 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
           />
           <datalist id="category-options">
             {existingCategories.map((c: string) => <option key={c} value={c} />)}
-            {Object.keys(CATEGORY_PATHS).filter(c => !existingCategories.includes(c)).map((c: string) => <option key={c} value={c} />)}
           </datalist>
           <div className="flex flex-wrap gap-1.5">
-            {['food', 'transport', 'stay', 'tickets', 'other'].map(c => (
+            {existingCategories.map(c => (
               <button
                 key={c}
                 type="button"
                 onClick={() => setCategory(c)}
-                className={`px-3 py-1 text-[13px] rounded-full border transition-colors ${category.toLowerCase() === c ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
+                className={`px-3 py-1 text-[13px] rounded-full border transition-colors ${category.toLowerCase() === c.toLowerCase() ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
               >
                 {c.charAt(0).toUpperCase() + c.slice(1)}
               </button>
@@ -876,27 +998,14 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
           </div>
         </div>
       </div>
-      <FieldError id="expense-total-error" message={errors.total} />
 
       <div className="mb-3">
-        <label className="inline-flex min-h-[2.75rem] cursor-pointer items-center gap-2 text-sm text-ink-muted">
-          <input
-            type="checkbox"
-            checked={splitPayment}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              setSplitPayment(e.target.checked);
-              clearError('payers');
-            }}
-          />
-          More than one person paid
-        </label>
-
-        {splitPayment && (
-          <div className="mt-2 space-y-2 rounded-xl border border-rule p-3">
+        {splitPayment && Object.keys(payerAmounts).length > 0 && (
+          <div className="mb-4 space-y-2 rounded-xl border border-rule p-3">
             <p className="text-sm text-ink-subtle">
               How much each of them put in. It has to add up to the total.
             </p>
-            {members.map((m: Member) => (
+            {members.filter(m => payerAmounts[m.id] !== undefined).map((m: Member) => (
               <div key={m.id} className="flex items-center gap-2">
                 <div className="w-28 truncate text-sm">{m.name}</div>
                 <input
@@ -916,40 +1025,53 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
         )}
       </div>
 
-      <div className="mb-2">
-        <div className="text-sm mb-1">Split method</div>
-        <div className="flex gap-2">
-          <label className={`flex min-h-[2.75rem] items-center gap-2 rounded-full border border-rule px-4 py-2 ${method==='equal' ? 'bg-sunken' : ''}`}>
+      <div className="mb-4">
+        <div className="text-sm mb-2 text-ink-muted">Split method</div>
+        <div className="flex gap-3">
+          <label className={`flex-1 flex justify-center items-center gap-2 rounded-xl border-2 px-4 py-2.5 cursor-pointer transition-all ${method==='equal' ? 'bg-ink text-canvas border-ink shadow-sm' : 'bg-surface text-ink-muted border-rule-strong hover:bg-sunken hover:border-ink hover:text-ink'}`}>
             <input 
               type="radio" 
               name="method" 
               checked={method==='equal'} 
               onChange={() => setMethod('equal')} 
-            /> Equal
+              className="sr-only"
+            />
+            <svg className={`w-4 h-4 ${method==='equal' ? 'opacity-100' : 'opacity-50'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="M5 17h14"></path></svg>
+            <span className="font-medium text-sm">Equal</span>
           </label>
-          <label className={`flex min-h-[2.75rem] items-center gap-2 rounded-full border border-rule px-4 py-2 ${method==='unequal' ? 'bg-sunken' : ''}`}>
+          <label className={`flex-1 flex justify-center items-center gap-2 rounded-xl border-2 px-4 py-2.5 cursor-pointer transition-all ${method==='unequal' ? 'bg-ink text-canvas border-ink shadow-sm' : 'bg-surface text-ink-muted border-rule-strong hover:bg-sunken hover:border-ink hover:text-ink'}`}>
             <input 
               type="radio" 
               name="method" 
               checked={method==='unequal'} 
               onChange={() => setMethod('unequal')} 
-            /> Custom
+              className="sr-only"
+            /> 
+            <svg className={`w-4 h-4 ${method==='unequal' ? 'opacity-100' : 'opacity-50'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+            <span className="font-medium text-sm">Custom</span>
           </label>
         </div>
       </div>
 
-      <div className="mb-2">
-        <div className="text-sm mb-1">Participants</div>
-        <div className="flex flex-wrap gap-2">
-          {members.map((m: Member) => (
-            <label key={m.id} className={`flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors ${selected.includes(m.id) ? 'border-accent bg-accent-soft' : 'border-rule hover:bg-sunken'}`}>
-              <input
-                type="checkbox"
-                checked={selected.includes(m.id)}
-                onChange={() => { toggleSelected(m.id); clearError('participants'); }}
-              /> {m.name}
-            </label>
-          ))}
+      <div className="mb-4">
+        <div className="text-sm mb-2 text-ink-muted">Who is splitting this cost?</div>
+        <div className="flex flex-wrap gap-3">
+          {members.map((m: Member) => {
+            const isSelected = selected.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => { toggleSelected(m.id); clearError('participants'); }}
+                className={`flex items-center gap-2 rounded-full pr-3 p-1 border transition-all ${isSelected ? 'border-accent bg-accent-soft shadow-sm' : 'border-transparent opacity-50 grayscale hover:grayscale-0 hover:opacity-100'}`}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-inner ${getAvatarColor(m.id)}`}>
+                  {getInitials(m.name)}
+                </div>
+                <span className="text-sm font-medium">{m.name}</span>
+              </button>
+            )
+          })}
         </div>
         <FieldError id="expense-participants-error" message={errors.participants} />
       </div>
@@ -975,25 +1097,109 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap justify-end gap-3 border-t border-rule pt-4">
-        {onCancel ? (
-          <button
-            className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
-            onClick={onCancel}
-          >
-            Cancel
+      {showInvoice && (
+        <div className="mt-8 mb-4 border-t border-rule pt-6">
+          <div className="flex justify-between items-center mb-4">
+             <h6 className="font-display font-medium text-lg">Live Receipt Preview</h6>
+             <button onClick={downloadReceipt} className="text-xs font-bold uppercase tracking-wider text-accent hover:text-accent-soft transition-colors flex items-center gap-1">
+               Download PNG
+             </button>
+          </div>
+          <div className="w-full max-w-[26rem] mx-auto text-[#111] font-mono text-[0.9rem] leading-relaxed relative drop-shadow-2xl" ref={receiptRef}>
+            <div className="h-2 w-full" style={{ background: 'radial-gradient(circle at 50% 0, transparent 4px, #fdfbf7 4.5px)', backgroundSize: '10px 10px', backgroundRepeat: 'repeat-x' }}></div>
+            
+            <div className="bg-[#fdfbf7] px-6 sm:px-8 pt-8 pb-4">
+              <div className="border-b-2 border-dashed border-[#ccc] pb-6 text-center">
+                <h3 className="text-xl font-bold tracking-[0.15em] uppercase">{tripName || 'Trip'} Receipt</h3>
+                <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">{title || 'Untitled Expense'}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">{new Date().toLocaleDateString()}</p>
+              </div>
+
+              <div className="divide-y-2 divide-dashed divide-[#ccc]">
+                {selected.map(id => {
+                  const m = members.find(x => x.id === id);
+                  if (!m) return null;
+                  let amt = 0;
+                  if (method === 'equal') amt = Number(total) / selected.length || 0;
+                  else amt = Number(customSplits[id]) || 0;
+
+                  return (
+                    <div key={id} className="py-6">
+                      <div className="font-bold uppercase text-[0.8rem] mb-3 text-[#111]">
+                        {m.name}
+                      </div>
+                      <div className="mt-5 relative z-10 max-w-[90%] ml-auto">
+                        <div className="absolute inset-0 bg-[#fef08a] transform -skew-x-12 -rotate-2 rounded-sm opacity-60"></div>
+                        <div className="relative px-3 py-2 font-sans text-xs text-[#b91c1c] font-medium flex justify-between items-end">
+                           <span className="flex flex-col">
+                             <span className="uppercase tracking-wider text-[#991b1b] text-[10px] mb-0.5">Owes</span>
+                           </span>
+                           <span className="text-lg font-bold tracking-tight">₹{amt.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t-2 border-dashed border-[#ccc] pt-6">
+                <div className="flex items-end justify-between font-bold border-t-2 border-[#111] pt-3 mt-1">
+                  <span className="text-lg uppercase">Total</span>
+                  <span className="text-2xl tracking-tighter">₹{Number(total || 0).toFixed(2)}</span>
+                </div>
+                <div className="mt-8 text-center text-[#555] text-[10px] uppercase space-y-1 opacity-80 font-sans tracking-wide pb-4">
+                  <p>TO THE BEST TRIP EVER ❤️</p>
+                  <p className="mt-2 font-bold text-[#111] text-xs">Thank you!</p>
+                </div>
+              </div>
+            </div>
+            <div className="h-2 w-full" style={{ background: 'radial-gradient(circle at 50% 100%, transparent 4px, #fdfbf7 4.5px)', backgroundSize: '10px 10px', backgroundRepeat: 'repeat-x' }}></div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap justify-between items-center gap-3 border-t border-rule pt-4">
+        <label className="group flex items-center gap-2.5 text-sm font-medium text-ink cursor-pointer hover:text-ink-strong transition-colors bg-surface border border-rule-strong rounded-xl px-4 py-2 hover:bg-sunken hover:border-ink hover:shadow-sm">
+          <div className="relative flex items-center">
+            <input type="checkbox" checked={showInvoice} onChange={(e) => setShowInvoice(e.target.checked)} className="peer sr-only" />
+            <div className="w-5 h-5 border-2 border-rule-strong rounded-[6px] bg-surface peer-checked:bg-ink peer-checked:border-ink transition-all"></div>
+            <svg className="absolute inset-0 w-5 h-5 text-canvas opacity-0 peer-checked:opacity-100 scale-50 peer-checked:scale-100 transition-all duration-200 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          Preview Live Receipt
+        </label>
+        
+        <div className="flex gap-3">
+          {onCancel ? (
+            <button
+              className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+          ) : (
+            <button
+              className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+              onClick={() => { 
+                setTitle(''); 
+                setTotal(''); 
+                setMethod('equal'); 
+                setCustomSplits({}); 
+                setCategory('');
+                setSplitPayment(false);
+                setPayerAmounts({});
+                setSelected(members.map((m: Member) => m.id));
+                setPayerId(members[0]?.id || '');
+                setErrors({}); 
+                setShowInvoice(false);
+              }}
+            >
+              Reset
+            </button>
+          )}
+          <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88 shadow-md" onClick={submit}>
+            {editingExpense ? 'Update expense' : 'Add expense'}
           </button>
-        ) : (
-          <button
-            className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
-            onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); setErrors({}); }}
-          >
-            Reset
-          </button>
-        )}
-        <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={submit}>
-          {editingExpense ? 'Update expense' : 'Add expense'}
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -1009,13 +1215,21 @@ function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) 
       ) : (
         // Rows separated by rules rather than boxed individually: a list of
         // ringed cards inside a card is three nested containers deep.
-        <ul className="mt-2 divide-y divide-rule">
+        <ul className="mt-2 divide-y divide-rule overflow-hidden">
+          <AnimatePresence initial={false}>
           {expenses.map((e: Expense) => {
             const share = isEqualSplit(e) && e.splits.length > 1
               ? `split ${e.splits.length} ways · ₹${currency(e.splits[0].amount)} each`
               : `${e.splits.length} custom share${e.splits.length === 1 ? '' : 's'}`;
             return (
-              <li key={e.id} className="group flex items-center gap-3 py-3">
+              <motion.li 
+                key={e.id} 
+                initial={{ opacity: 0, y: -20, rotateX: 45 }}
+                animate={{ opacity: 1, y: 0, rotateX: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                className="group flex items-center gap-3 py-3"
+              >
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
                   style={categoryStyle(e.category)}
@@ -1064,9 +1278,10 @@ function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) 
                     </svg>
                   </button>
                 </div>
-              </li>
+              </motion.li>
             );
           })}
+          </AnimatePresence>
         </ul>
       )}
     </div>
@@ -1497,25 +1712,28 @@ export default function TripExpenseApp() {
         </div>
 
         <div className="max-w-6xl mx-auto relative z-10">
-          <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <header className="flex flex-wrap items-center justify-between gap-4 mb-8 pt-4">
             <div>
-              <h1 className="font-display text-[1.35rem] font-semibold tracking-tighter text-ink">
+              <h1 className="font-display font-black tracking-tighter text-[2.5rem] sm:text-[3rem] text-ink">
                 <button
                   type="button"
                   onClick={() => navigate({ name: 'landing' })}
                   title="Back to the Hisaab home page"
-                  className="rounded-full transition-opacity hover:opacity-70 text-inherit"
+                  className="transition-transform hover:scale-105 active:scale-95 duration-300 text-inherit origin-left flex items-center"
                 >
-                  Hisaab
+                  <span className="text-ink hover:text-accent transition-colors duration-300">
+                    Hisaab
+                  </span>
                 </button>
               </h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 bg-surface sm:bg-transparent border sm:border-0 border-rule rounded-full sm:rounded-none px-4 sm:px-0 py-1.5 sm:py-0 shadow-sm sm:shadow-none">
               <SyncStatus
                 phase={sync.phase}
                 onRetry={sync.retry}
                 onSignIn={() => setSignInReason('Sign in again to keep syncing.')}
               />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2 bg-surface sm:bg-transparent border sm:border-0 border-rule border-l-0 sm:border-l-0 rounded-r-full sm:rounded-none -ml-6 sm:ml-0 pl-6 sm:pl-0 pr-1 sm:pr-0 py-1 sm:py-0 shadow-sm sm:shadow-none">
+              <div className="w-px h-5 bg-rule hidden sm:block"></div>
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
               {isBackendConfigured && (
                 user ? (
@@ -1529,9 +1747,11 @@ export default function TripExpenseApp() {
                 ) : (
                   <button
                     onClick={() => setSignInReason('')}
-                    className="inline-flex min-h-[2.25rem] items-center rounded-full px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+                    className="group relative inline-flex min-h-[2.25rem] items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+                    title="Sign in to back up your data"
                   >
-                    Sign in
+                    <svg className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11v6m0 0l-3-3m3 3l3-3" /></svg>
+                    <span>Sign in <span className="hidden sm:inline-block font-normal opacity-70">to sync</span></span>
                   </button>
                 )
               )}
@@ -1660,7 +1880,14 @@ export default function TripExpenseApp() {
                     const upd = { ...current, members: [...current.members, m] };
                     updateTrip(upd);
                   }}
-                  onRequestRemove={(m: Member) => setPendingRemoval(m)}
+                  onRequestRemove={(m: Member) => {
+                    const impact = removalImpact(current, m.id);
+                    if (impact.involvedCount === 0 && impact.paidCount === 0) {
+                      updateTrip(applyRemoval(current, m.id, 'keep'));
+                    } else {
+                      setPendingRemoval(m);
+                    }
+                  }}
                 />
               </div>
 
@@ -1668,6 +1895,7 @@ export default function TripExpenseApp() {
                 <ExpenseForm 
                   members={activeMembers}
                   existingCategories={Array.from(new Set(current.expenses.map((e: Expense) => e.category)))}
+                  tripName={current.name}
                   onAdd={(exp: Expense) => {
                     const upd = { ...current, expenses: [...current.expenses, exp] }; 
                     updateTrip(upd); 
@@ -1703,9 +1931,9 @@ export default function TripExpenseApp() {
                 }} />
                 <div className="rounded-2xl border border-rule bg-surface p-5">
                   <h2 className="font-display text-xl tracking-tight mb-3">Actions</h2>
-<div className="space-y-2">
+<div className="flex gap-3">
   <button 
-    className="w-full inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+    className="flex-1 inline-flex min-h-[3.5rem] items-center justify-center gap-2 rounded-xl border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-all hover:bg-sunken hover:border-accent hover:shadow-sm" 
     onClick={() => { 
       // Export to CSV
       const nameOf = (id: string): string => current.members.find((m: Member) => m.id === id)?.name || 'Unknown';
@@ -1739,10 +1967,11 @@ export default function TripExpenseApp() {
       URL.revokeObjectURL(url);
     }}
   >
+    <svg className="w-5 h-5 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
     Export CSV
   </button>
   <button 
-    className="w-full inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken disabled:cursor-not-allowed disabled:text-ink-subtle disabled:hover:bg-transparent"
+    className="flex-1 inline-flex min-h-[3.5rem] items-center justify-center gap-2 rounded-xl border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-all hover:bg-sunken hover:border-accent hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
     disabled={exportState === 'working'}
     onClick={async () => {
       // SheetJS is bundled, not fetched from a CDN, so export works offline.
@@ -1811,6 +2040,7 @@ export default function TripExpenseApp() {
       setExportState('idle');
     }}
   >
+    <svg className="w-5 h-5 text-ink-muted group-hover:text-ink transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
     {exportState === 'working' ? 'Preparing…' : 'Export XLSX'}
   </button>
   {exportState === 'failed' && (
@@ -1854,12 +2084,14 @@ export default function TripExpenseApp() {
         />
       )}
       {editingExpenseId && current && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-sm" onClick={() => setEditingExpenseId(null)}>
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => setEditingExpenseId(null)} labelledBy="edit-expense-title" width="max-w-lg">
+          <h2 id="edit-expense-title" className="sr-only">Edit Expense</h2>
+          <div className="-mx-2 sm:-mx-4">
             <ExpenseForm
               members={activeMembers}
               existingCategories={Array.from(new Set(current.expenses.map((e: Expense) => e.category)))}
               editingExpense={current.expenses.find((e: Expense) => e.id === editingExpenseId)}
+              tripName={current.name}
               onAdd={() => {}}
               onUpdate={(exp: Expense) => {
                 const upd = { ...current, expenses: current.expenses.map((e: Expense) => e.id === exp.id ? exp : e) };
@@ -1869,7 +2101,7 @@ export default function TripExpenseApp() {
               onCancel={() => setEditingExpenseId(null)}
             />
           </div>
-        </div>
+        </Modal>
       )}
     </div>
     </>
