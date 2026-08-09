@@ -65,9 +65,14 @@ const num = (v: number | string): number => Number(v);
 const byPosition = <T extends { position: number }>(a: T, b: T): number => a.position - b.position;
 
 export function tripToPayload(trip: Trip): TripPayload {
-  // See the AmountRow comment: canonicalise splits/payments to member order
-  // here too, not just on the way back, so this function doesn't silently
-  // depend on whatever order the local array happened to be built in.
+  // Postgres treats splits and payments as a set keyed by (expense_id,
+  // member_id) — see the AmountRow comment — so the server does not care what
+  // order this function emits them in. The sort below exists anyway: it keeps
+  // the payload a deterministic function of trip *content*, not of whatever
+  // order the local array happened to be built in. Without it, two trips with
+  // identical members and amounts but differently-ordered splits arrays would
+  // produce different (non-byte-equal) payloads, which breaks anything that
+  // diffs payloads to decide whether a push is needed.
   const memberPosition = new Map<string, number>(trip.members.map((m: Member, i: number) => [m.id, i]));
   const byMemberPosition = (a: { memberId: string }, b: { memberId: string }): number =>
     (memberPosition.get(a.memberId) ?? 0) - (memberPosition.get(b.memberId) ?? 0);

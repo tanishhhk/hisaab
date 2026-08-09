@@ -159,6 +159,43 @@ describe('tripToPayload / remoteToTrip round trip', () => {
   });
 });
 
+describe('tripToPayload', () => {
+  it('produces the same payload regardless of the order splits happen to sit in locally', () => {
+    const members = [
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Asha' },
+      { id: '33333333-3333-4333-8333-333333333333', name: 'Bilal' },
+      { id: '66666666-6666-4666-8666-666666666666', name: 'Chetan' },
+    ];
+    const expenseInMemberOrder = {
+      id: '44444444-4444-4444-8444-444444444444',
+      title: 'Groceries',
+      payerId: '22222222-2222-4222-8222-222222222222',
+      total: 300,
+      splits: [
+        { memberId: '22222222-2222-4222-8222-222222222222', amount: 100 },
+        { memberId: '33333333-3333-4333-8333-333333333333', amount: 100 },
+        { memberId: '66666666-6666-4666-8666-666666666666', amount: 100 },
+      ],
+      category: 'food',
+      date: '2026-01-02T00:00:00.000Z',
+    };
+    const a = base({ members, expenses: [expenseInMemberOrder] });
+    const b = base({
+      members,
+      expenses: [
+        {
+          ...expenseInMemberOrder,
+          // Same members, same amounts, shuffled order — content is identical
+          // to `a`, only the local array order differs.
+          splits: [...expenseInMemberOrder.splits].reverse(),
+        },
+      ],
+    });
+
+    expect(tripToPayload(a)).toEqual(tripToPayload(b));
+  });
+});
+
 describe('remoteToTrip', () => {
   it('restores expense and member order from position, not array order', () => {
     const t = base({
