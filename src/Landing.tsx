@@ -280,7 +280,7 @@ const SOCIAL_ICONS: Record<string, React.ReactNode> = {
 
 const SOCIALS: { label: string; href: string; caption: string }[] = [
   { label: 'GitHub', href: 'https://github.com/tanishhhk', caption: 'every bug, publicly, forever' },
-  { label: 'Instagram', href: 'https://www.instagram.com/_tanishhhkk', caption: 'mostly food I did not split fairly' },
+  { label: 'Instagram', href: 'https://www.instagram.com/_tanishhhkk', caption: 'proof I leave the house' },
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/tanishhhk', caption: 'the one wearing a collar' },
 ];
 
@@ -842,12 +842,12 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
         <div className="mt-20 border-t border-rule pt-9 sm:flex sm:items-center sm:gap-8 sm:border-0 sm:pt-0">
           <span aria-hidden className="hidden h-px flex-1 bg-rule sm:block" />
           {/* The nod is in "split it wisely", which carries both halves of the
-              name. Left unitalicised on purpose: the reader who catches it
-              catches it, and pointing at your own joke kills it. The second
-              clause has to land on the actual difference, which is exactness,
-              because the six proofs underneath are the evidence for it. */}
+              name, so both words take the accent. The second clause lands on
+              exactness because the six proofs underneath are its evidence. */}
           <p className="text-center font-display text-[clamp(1.15rem,2.1vw,1.4rem)] leading-[1.35] tracking-tight">
-            Plenty of apps split it wisely. We would rather split it exactly.
+            Plenty of apps <span className="text-accent">split</span> it{' '}
+            <span className="text-accent">wisely</span>. We would rather split
+            it exactly.
           </p>
           <span aria-hidden className="hidden h-px flex-1 bg-rule sm:block" />
         </div>
@@ -901,7 +901,10 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
               argument, it has paid for itself.
             </p>
 
-            <div className="mt-7 flex flex-wrap items-center gap-2">
+            <h3 className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+              Loitering elsewhere
+            </h3>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {SOCIALS.map((link) => (
                 <SocialLink key={link.label} {...link} />
               ))}
