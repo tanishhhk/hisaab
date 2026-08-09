@@ -178,16 +178,6 @@ const PROOFS: { title: string; body: string }[] = [
   },
 ];
 
-// The leader dots that run from a dish to its price. A real bill's device, and
-// the thing that makes a two-column list read as one line rather than two.
-function Leader() {
-  return (
-    <span
-      aria-hidden
-      className="mx-2 min-w-[1.5rem] flex-1 translate-y-[-0.28em] border-b border-dotted border-ink/25"
-    />
-  );
-}
 
 function LedgerStrip({ reduce }: { reduce: boolean }) {
   const [shown, setShown] = React.useState(reduce ? LEDGER.length : 0);
@@ -398,22 +388,6 @@ function useSmoothScroll(enabled: boolean) {
   }, [enabled]);
 }
 
-// Matches the lg: breakpoint the layout classes use, so the motion and the
-// grid agree about which arrangement is on screen.
-function useWide(): boolean {
-  const query = '(min-width: 1024px)';
-  const [wide, setWide] = React.useState(
-    () => typeof window !== 'undefined' && window.matchMedia(query).matches
-  );
-  React.useEffect(() => {
-    const mq = window.matchMedia(query);
-    const sync = () => setWide(mq.matches);
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, []);
-  return wide;
-}
 
 function InstallBand() {
   const [prompt, setPrompt] = React.useState<any>(null);
@@ -654,7 +628,6 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
   // scrub is switched off and the section plays out as ordinary stacked
   // content. Without this the answer card stays at opacity 0, because its
   // opacity is driven by a scroll range that no longer exists.
-  const wide = useWide();
   const still = reduce ? {} : undefined;
   useSmoothScroll(!reduce);
 
