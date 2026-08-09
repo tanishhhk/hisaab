@@ -481,9 +481,15 @@ function InstallBand() {
   );
 }
 
+// Each bubble arrives on its own beat, the way the messages actually did.
+const BUBBLE = {
+  hidden: { opacity: 0, y: 8 },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const } },
+};
+
 function ChatBubble({ from, text, mine }: { from: string; text: string; mine?: boolean }) {
   return (
-    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+    <motion.div variants={BUBBLE} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-[0.9rem] leading-snug ${
           mine
@@ -494,7 +500,7 @@ function ChatBubble({ from, text, mine }: { from: string; text: string; mine?: b
         {!mine && <div className="text-[0.7rem] font-medium text-ink-subtle">{from}</div>}
         {text}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -629,9 +635,8 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
                 Three days later, in the group chat.
               </h2>
               <p className="mt-5 max-w-[44ch] text-lg text-ink-muted">
-                This is the part everyone dreads. The arithmetic was never the
-                hard bit. It is the reconstruction, from memory, in a chat where
-                half the payments were never mentioned.
+                The maths was never the hard part. Remembering who paid for
+                what, three days later, is.
               </p>
               {/* Wide, this line is scrubbed in by the same scroll that fades
                   the chat out. Stacked, it would otherwise sit under the intro
@@ -656,8 +661,16 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
                   because it ran to fourteen messages; at ten the whole thing
                   fits, and the last line is the joke, so hiding it behind a
                   nested scrollbar was throwing away the payoff. */}
+              {/* The messages land one at a time, the way they did in the
+                  actual chat, and the payoff below waits for them to finish.
+                  Wide, the scrub owns the timing and everything is already
+                  visible, so the stagger only runs in the stacked layout. */}
               <motion.div
                 style={still ?? { y: chatY, opacity: chatOpacity, filter: chatBlur }}
+                initial={reduce ? false : 'hidden'}
+                whileInView="shown"
+                viewport={{ once: true, margin: '-70px' }}
+                variants={{ shown: { transition: { staggerChildren: 0.13 } } }}
                 className="w-full space-y-2 lg:chat-fade lg:overflow-hidden lg:col-start-1 lg:row-start-1 lg:self-center"
                 aria-hidden
               >
@@ -666,13 +679,14 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
                 ))}
               </motion.div>
 
-              {/* The phone's version of the turn: the line and the card arrive
-                  together, once the reader has actually scrolled past the mess. */}
+              {/* The phone's version of the turn. It waits out the whole
+                  thread, so the answer lands after the mess rather than beside
+                  it: eight bubbles at 0.13s plus a beat to breathe. */}
               <motion.p
                 initial={reduce ? false : { opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-90px' }}
-                transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.6, delay: 1.35, ease: [0.16, 1, 0.3, 1] }}
                 className="text-lg font-medium lg:hidden"
               >
                 Hisaab reduces it to three payments.
@@ -683,7 +697,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
                 initial={wide || reduce ? false : { opacity: 0, y: 14 }}
                 whileInView={wide || reduce ? undefined : { opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-80px' }}
-                transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.6, delay: 1.6, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full lg:col-start-1 lg:row-start-1 lg:self-center"
               >
                 <div className="rounded-2xl border border-rule bg-surface p-6">
