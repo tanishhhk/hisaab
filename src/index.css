@@ -178,13 +178,11 @@ body {
   .app-enter { animation: none; }
 }
 
-/* Stacked, the thread has to be cut off somewhere. Clipping it with a fade
-   rather than deleting messages keeps the point of the scene — that the chat
-   goes on and on — while giving the answer below it room to arrive. */
-@media (max-width: 1023px) {
-  .chat-fade {
-    max-height: 21rem;
-    -webkit-mask-image: linear-gradient(to bottom, black 0%, black 62%, transparent 100%);
-    mask-image: linear-gradient(to bottom, black 0%, black 62%, transparent 100%);
+/* Only the pinned wide layout clips the thread, where it shares a fixed-height
+   cell with the settlement card. Stacked, the whole thread is in page flow. */
+@media (min-width: 1024px) {
+  .lg\:chat-fade {
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 0%, black 78%, transparent 100%);
   }
 }

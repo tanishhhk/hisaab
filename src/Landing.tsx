@@ -10,21 +10,20 @@ import ThemeToggle from './ThemeToggle';
 //   4. Here is the working thing. Touch it.
 // Everything else is quiet.
 
+// Nine messages, not fourteen. Long enough to feel the mess, short enough to
+// read on a phone without scrolling past the joke. It ends warm on purpose:
+// the trip was good, the arithmetic is the only thing that went wrong.
 const CHAT: { from: string; text: string; mine?: boolean }[] = [
   { from: 'Rohan', text: 'guys settle up karo, I paid for the hotel' },
-  { from: 'Asha', text: 'how much was it' },
-  { from: 'Rohan', text: '8600 for both nights' },
+  { from: 'Asha', text: 'how much' },
+  { from: 'Rohan', text: '8600. two nights' },
   { from: 'Divya', text: 'I paid 1450 for breakfast btw' },
-  { from: 'Chetan', text: 'and the cab to the fort was 3500, I paid that' },
-  { from: 'Asha', text: 'wait was Divya in the cab?' },
-  { from: 'Divya', text: 'no I stayed back' },
+  { from: 'Chetan', text: 'cab to the fort was 3500, that was me' },
+  { from: 'Asha', text: 'wait was Divya even in the cab' },
+  { from: 'Divya', text: 'no I slept in' },
   { from: 'You', text: 'so do I owe Rohan or Chetan', mine: true },
-  { from: 'Asha', text: 'I paid 2400 at the night market, that was everyone' },
-  { from: 'Chetan', text: 'didn’t you already pay me back for petrol' },
-  { from: 'Rohan', text: 'that was last trip' },
-  { from: 'Asha', text: 'guys can someone just make a sheet' },
-  { from: 'Divya', text: 'not it' },
-  { from: 'You', text: 'ok I’ll do it', mine: true },
+  { from: 'Asha', text: 'yes' },
+  { from: 'Chetan', text: 'great trip tho' },
 ];
 
 const SETTLEMENT = [
@@ -153,45 +152,31 @@ const BILL: {
   },
 ];
 
-// The six proofs, each with a mark drawn on the same 24 grid at the same 1.75
-// stroke weight as the category icons in the app. One authored set, so the
-// marketing page and the product look like the same piece of software.
-const PROOFS: { title: string; body: string; icon: string }[] = [
+// The six proofs the page has just earned the right to make.
+const PROOFS: { title: string; body: string }[] = [
   {
     title: 'Nothing goes missing in the rounding',
     body: 'Shares are worked out in paise and the odd remainder is handed out one at a time, so ₹100 across three people is 33.34 plus 33.33 plus 33.33, never ₹99.99.',
-    // A coin, with the odd paisa marked off to one side.
-    icon: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 8v8M9.5 10.2a2.2 2.2 0 0 1 5 0M9.5 13.8a2.2 2.2 0 0 0 5 0',
   },
   {
     title: 'The fewest transfers',
     body: 'Rather than everyone paying everyone, the whole trip collapses into the shortest list of payments that clears the group.',
-    // Many strands converging into one arrow.
-    icon: 'M3 6h5c2 0 3 2 5 2M3 12h10M3 18h5c2 0 3-2 5-2M13 12h7M17 8l4 4-4 4',
   },
   {
     title: 'People change mid-trip',
     body: 'Someone leaves early? Redistribute their share across who remains, or keep the history exactly as it was recorded.',
-    // Two figures kept, one stepping out.
-    icon: 'M4 20v-1.5a3.5 3.5 0 0 1 3.5-3.5h1A3.5 3.5 0 0 1 12 18.5V20M8 7.5a2.75 2.75 0 1 0 0 5.5 2.75 2.75 0 0 0 0-5.5M16 12h5M19 9.5 21.5 12 19 14.5',
   },
   {
     title: 'Leaves with your data',
     body: 'Export the whole trip to CSV or Excel, with a row per person per expense and a summary that reconciles.',
-    // A sheet with an arrow leaving it.
-    icon: 'M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9M14 3l4 4M14 3v3.5a.5.5 0 0 0 .5.5H18M9 17h6M9 13h3',
   },
   {
     title: 'Works with no signal',
     body: 'It runs entirely in your browser, and installs to your phone. On a bus, in a hill station, on aeroplane mode.',
-    // A phone, with the signal arcs struck through.
-    icon: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1M10.5 17.5h3M4 4l16 16',
   },
   {
     title: 'It checks your maths',
     body: 'Type the amounts by hand and Hisaab tells you how far off the total you are, and in which direction, before it accepts them.',
-    // A balance scale, level.
-    icon: 'M12 4v16M8 20h8M4 8h16M4 8l-2 5a2.5 2.5 0 0 0 4 0zM20 8l2 5a2.5 2.5 0 0 1-4 0zM12 5.5 8 8M12 5.5 16 8',
   },
 ];
 
@@ -244,14 +229,15 @@ function LedgerStrip({ reduce }: { reduce: boolean }) {
           >
             <span className="min-w-0">
               <span className="block truncate text-[0.95rem]">{row.what}</span>
-              <span className="flex items-center gap-1.5 text-xs text-ink-subtle">
-                {row.who} paid
-                {row.note && (
-                  <span className="rounded-full bg-accent-soft px-1.5 py-0.5 font-medium text-accent">
-                    {row.note}
-                  </span>
-                )}
-              </span>
+              {/* The badge used to sit inline, so on a phone "Asha and Rohan
+                  paid" wrapped and the pill landed beside the orphaned word.
+                  Its own line, and it reads as the annotation it is. */}
+              <span className="block truncate text-xs text-ink-subtle">{row.who} paid</span>
+              {row.note && (
+                <span className="mt-1 inline-block rounded-full bg-accent-soft px-2 py-0.5 text-[0.7rem] font-medium text-accent">
+                  {row.note}
+                </span>
+              )}
             </span>
             <span className="shrink-0 tnum text-[0.95rem]">&#8377;{inr(row.amount)}</span>
           </li>
@@ -451,23 +437,16 @@ function InstallBand() {
 
   return (
     <section className="border-y border-rule bg-sunken">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 lg:grid-cols-[auto_1fr_auto]">
-        {/* The mark that will actually sit on their home screen. */}
-        <div className="flex items-center gap-4">
-          <span className="grid h-16 w-16 shrink-0 place-items-center rounded-[1.15rem] bg-ink">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-8 w-8 text-canvas">
-              <path d="M4 12h13M13 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span className="font-display text-2xl tracking-tighter lg:hidden">Hisaab</span>
-        </div>
-
+      {/* The arrow tile and the wordmark were saying "Hisaab" a third time on a
+          page that has it in the header and the footer. Dropped, and the line
+          carries the band on its own. */}
+      <div className="mx-auto grid max-w-6xl gap-8 px-6 py-16 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-12">
         <div>
-          <p className="max-w-[34ch] font-display text-[clamp(1.5rem,2.6vw,2.1rem)] leading-[1.15] tracking-tight">
+          <p className="max-w-[24ch] font-display text-[clamp(1.6rem,3.2vw,2.35rem)] leading-[1.1] tracking-tighter">
             Expressive millennial or nonchalant Gen Z, the hisaab comes for
             everyone.
           </p>
-          <p className="mt-3 max-w-[52ch] text-ink-muted">
+          <p className="mt-4 max-w-[46ch] text-ink-muted">
             Keep it on your home screen. It opens with no signal, so it still
             works on the bus back.
           </p>
@@ -579,7 +558,7 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             onClick={onStart}
             className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
           >
-            Open the app
+            Settle up
           </button>
         </div>
       </header>
@@ -628,7 +607,7 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             onClick={onSample}
             className="whitespace-nowrap rounded-full border border-rule-strong px-5 py-3 text-[0.95rem] font-medium transition-colors hover:bg-sunken sm:px-6 sm:text-base"
           >
-            See a worked example
+            Show me
           </button>
         </motion.div>
 
@@ -683,13 +662,14 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                 and centring a 12-message thread in a fixed-height cell made it
                 bleed upward over the paragraph. */}
             <div className="relative flex flex-col gap-8 lg:grid lg:h-[58vh] lg:min-h-[400px] lg:place-items-center lg:gap-0">
-              {/* data-lenis-prevent hands this element's wheel and touch back
-                  to the browser, so scrolling inside the thread does not also
-                  drive the smoothed page scroll. */}
+              {/* Stacked, the thread just sits in the page and scrolls with
+                  everything else. It used to be clipped with an inner scroller
+                  because it ran to fourteen messages; at ten the whole thing
+                  fits, and the last line is the joke, so hiding it behind a
+                  nested scrollbar was throwing away the payoff. */}
               <motion.div
                 style={still ?? { y: chatY, opacity: chatOpacity, filter: chatBlur }}
-                data-lenis-prevent
-                className="chat-fade w-full space-y-2 overflow-y-auto overscroll-contain lg:overflow-hidden lg:col-start-1 lg:row-start-1 lg:self-center"
+                className="w-full space-y-2 lg:chat-fade lg:overflow-hidden lg:col-start-1 lg:row-start-1 lg:self-center"
                 aria-hidden
               >
                 {CHAT.map((c, i) => (
@@ -852,44 +832,42 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           </div>
         </motion.div>
 
-        {/* A nod to the category, never a name. It earns its keep only
-            because the six proofs directly below are concrete, so it reads
-            as a summary of evidence rather than a boast. */}
-        <p className="mt-16 max-w-[44ch] border-t border-rule pt-10 font-display text-[clamp(1.15rem,2.2vw,1.5rem)] leading-[1.25] tracking-tight">
-          Plenty of apps put <span className="italic">wise</span> in the name.
-          We would rather put it in the arithmetic.
-        </p>
+        {/* A nod to the category, never a name. Set as a separator rather than
+            a paragraph: rules running out to both edges, the line centred in
+            the gap. It is a beat between the proof above and the proofs below,
+            so it should read as punctuation, not as body copy. */}
+        {/* Rules beside the line once there is width for them to read as a
+            rule. On a phone the text needs the whole measure, so the rule goes
+            above it instead of being squeezed to nothing on either side. */}
+        <div className="mt-20 border-t border-rule pt-9 sm:flex sm:items-center sm:gap-8 sm:border-0 sm:pt-0">
+          <span aria-hidden className="hidden h-px flex-1 bg-rule sm:block" />
+          <p className="text-center font-display text-[clamp(1.15rem,2.1vw,1.4rem)] leading-[1.35] tracking-tight">
+            Plenty of apps put <span className="italic">wise</span> in the name.
+            We would rather put it in the arithmetic.
+          </p>
+          <span aria-hidden className="hidden h-px flex-1 bg-rule sm:block" />
+        </div>
 
         {/* Stacked on a phone these ran together as one grey column, so each
             proof gets a rule and real breathing room. The dividers disappear
             once the grid has columns to do that work instead. */}
         <div className="mt-9 grid divide-y divide-rule sm:grid-cols-2 sm:gap-x-10 sm:gap-y-9 sm:divide-y-0 lg:grid-cols-3">
-          {PROOFS.map(({ title, body, icon }) => (
+          {PROOFS.map(({ title, body }) => (
             <motion.div
               key={title}
               initial={reduce ? false : { opacity: 0, y: 14 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-80px' }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="flex gap-4 py-7 first:pt-0 sm:block sm:py-0"
+              className="py-7 first:pt-0 sm:py-0"
             >
-              {/* Drawn on the same 24 grid at the same 1.75 stroke as the
-                  category icons inside the app, so the two sets read as one
-                  hand. On a phone the mark sits beside the text and gives the
-                  column something to scan down; above it once there are real
-                  columns doing that work. */}
-              <span
-                aria-hidden
-                className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/[0.09] text-accent sm:mb-3.5 sm:h-11 sm:w-11"
-              >
-                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-                  <path d={icon} stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-              <div>
-              <h3 className="font-display text-xl font-semibold tracking-tight sm:text-lg">{title}</h3>
+              {/* A short accent rule instead of an icon. It gives the stacked
+                  column something to scan down without putting a cartoon next
+                  to a sentence about arithmetic, and it is the same ruled line
+                  the rest of the page is built on. */}
+              <span aria-hidden className="block h-[2px] w-7 rounded-full bg-accent/70" />
+              <h3 className="mt-3.5 font-display text-xl font-semibold tracking-tight sm:text-lg">{title}</h3>
               <p className="mt-2 max-w-[42ch] text-[0.95rem] leading-relaxed text-ink-muted">{body}</p>
-              </div>
             </motion.div>
           ))}
         </div>
