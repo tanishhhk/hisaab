@@ -25,3 +25,6 @@ dist/
 # Scratch workspace for plan execution: ledgers, briefs, review packages.
 # The git history is the real record once a plan is done.
 .superpowers/
+
+# Design specs and implementation plans. Kept on disk, out of the repo.
+docs/superpowers/
