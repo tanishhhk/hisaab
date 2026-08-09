@@ -28,10 +28,33 @@ alter table public.splits
 -- referenced members(id) with nothing tying it to the expense's trip. The fix
 -- is structural rather than a trigger. Carrying trip_id on the child and
 -- pointing a composite key at (id, trip_id) makes the wrong row unreferenceable.
-alter table public.members
-  add constraint members_id_trip_key unique (id, trip_id);
-alter table public.expenses
-  add constraint expenses_id_trip_key unique (id, trip_id);
+--
+-- Postgres has no "add constraint if not exists", so each of these is
+-- wrapped in a guard: this file gets pasted into the SQL Editor by hand, and
+-- a re-run after an unrelated failure further down must not die here.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'members_id_trip_key'
+       and conrelid = 'public.members'::regclass
+  ) then
+    alter table public.members
+      add constraint members_id_trip_key unique (id, trip_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'expenses_id_trip_key'
+       and conrelid = 'public.expenses'::regclass
+  ) then
+    alter table public.expenses
+      add constraint expenses_id_trip_key unique (id, trip_id);
+  end if;
+end $$;
 
 alter table public.splits
   add column if not exists trip_id uuid;
@@ -44,22 +67,49 @@ alter table public.splits
 
 -- Replace the single-column references with composite ones.
 alter table public.expenses drop constraint if exists expenses_payer_id_fkey;
-alter table public.expenses
-  add constraint expenses_payer_in_trip
-  foreign key (payer_id, trip_id) references public.members (id, trip_id)
-  on delete restrict;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'expenses_payer_in_trip'
+       and conrelid = 'public.expenses'::regclass
+  ) then
+    alter table public.expenses
+      add constraint expenses_payer_in_trip
+      foreign key (payer_id, trip_id) references public.members (id, trip_id)
+      on delete restrict;
+  end if;
+end $$;
 
 alter table public.splits drop constraint if exists splits_expense_id_fkey;
-alter table public.splits
-  add constraint splits_expense_in_trip
-  foreign key (expense_id, trip_id) references public.expenses (id, trip_id)
-  on delete cascade;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'splits_expense_in_trip'
+       and conrelid = 'public.splits'::regclass
+  ) then
+    alter table public.splits
+      add constraint splits_expense_in_trip
+      foreign key (expense_id, trip_id) references public.expenses (id, trip_id)
+      on delete cascade;
+  end if;
+end $$;
 
 alter table public.splits drop constraint if exists splits_member_id_fkey;
-alter table public.splits
-  add constraint splits_member_in_trip
-  foreign key (member_id, trip_id) references public.members (id, trip_id)
-  on delete restrict;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'splits_member_in_trip'
+       and conrelid = 'public.splits'::regclass
+  ) then
+    alter table public.splits
+      add constraint splits_member_in_trip
+      foreign key (member_id, trip_id) references public.members (id, trip_id)
+      on delete restrict;
+  end if;
+end $$;
 
 -- ------------------------------------------------------------ payments ----
 -- Where Expense.payers lives. The schema predated split payments, so
@@ -109,9 +159,16 @@ create policy payments_via_expense on public.payments
 -- The one invariant that cannot be a column constraint, because it spans
 -- rows: what everyone owes must equal what the expense cost. Deferred to
 -- commit, so a whole trip can be written in any order inside one transaction.
+--
+-- A split or payment can be reparented to a different expense_id in one
+-- UPDATE. That leaves two expenses to re-check, not one: the one it left,
+-- which just lost a row and may no longer balance, and the one it joined.
+-- ids collects whichever of old/new is relevant for this tg_op and checks
+-- each exactly once.
 create or replace function public.check_expense_balanced() returns trigger
 language plpgsql as $$
 declare
+  ids     uuid[];
   eid     uuid;
   e_total numeric(12,2);
   s_total numeric(12,2);
@@ -119,32 +176,42 @@ declare
   p_count integer;
 begin
   if tg_table_name = 'expenses' then
-    if tg_op = 'DELETE' then eid := old.id; else eid := new.id; end if;
+    if tg_op = 'DELETE' then ids := array[old.id]; else ids := array[new.id]; end if;
+  elsif tg_op = 'DELETE' then
+    ids := array[old.expense_id];
+  elsif tg_op = 'INSERT' then
+    ids := array[new.expense_id];
+  elsif new.expense_id is distinct from old.expense_id then
+    ids := array[old.expense_id, new.expense_id];
   else
-    if tg_op = 'DELETE' then eid := old.expense_id; else eid := new.expense_id; end if;
+    ids := array[new.expense_id];
   end if;
 
-  select total into e_total from public.expenses where id = eid;
-  -- The parent is gone, so this fired from the cascade that removed it.
-  -- Without this the check would evaluate against a vanished row and make
-  -- deleting any expense impossible.
-  if not found then
-    return null;
-  end if;
+  foreach eid in array ids loop
+    select total into e_total from public.expenses where id = eid;
+    -- The parent is gone: either this fired from the cascade that removed
+    -- it, or (on a reparenting update) the row being checked was itself
+    -- deleted in the same transaction. Without this the check would
+    -- evaluate against a vanished row and make deleting any expense
+    -- impossible.
+    if not found then
+      continue;
+    end if;
 
-  select coalesce(sum(amount), 0) into s_total
-    from public.splits where expense_id = eid;
-  if abs(s_total - e_total) > 0.005 then
-    raise exception 'splits for expense % sum to %, but the total is %',
-      eid, s_total, e_total;
-  end if;
+    select coalesce(sum(amount), 0) into s_total
+      from public.splits where expense_id = eid;
+    if abs(s_total - e_total) > 0.005 then
+      raise exception 'splits for expense % sum to %, but the total is %',
+        eid, s_total, e_total;
+    end if;
 
-  select coalesce(sum(amount), 0), count(*) into p_total, p_count
-    from public.payments where expense_id = eid;
-  if p_count > 0 and abs(p_total - e_total) > 0.005 then
-    raise exception 'payments for expense % sum to %, but the total is %',
-      eid, p_total, e_total;
-  end if;
+    select coalesce(sum(amount), 0), count(*) into p_total, p_count
+      from public.payments where expense_id = eid;
+    if p_count > 0 and abs(p_total - e_total) > 0.005 then
+      raise exception 'payments for expense % sum to %, but the total is %',
+        eid, p_total, e_total;
+    end if;
+  end loop;
 
   return null;
 end;
