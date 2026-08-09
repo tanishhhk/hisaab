@@ -647,7 +647,15 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           </p>
         </motion.div>
 
-        <div className="mt-16 grid gap-x-10 gap-y-9 border-t border-rule pt-10 sm:grid-cols-2 lg:grid-cols-3">
+        {/* A nod to the category, never a name. It earns its keep only
+            because the six proofs directly below are concrete, so it reads
+            as a summary of evidence rather than a boast. */}
+        <p className="mt-16 max-w-[44ch] border-t border-rule pt-10 font-display text-[clamp(1.15rem,2.2vw,1.5rem)] leading-[1.25] tracking-tight">
+          Plenty of apps put <span className="italic">wise</span> in the name.
+          We would rather put it in the arithmetic.
+        </p>
+
+        <div className="mt-9 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
           {[
             ['Nothing goes missing in the rounding', 'Shares are worked out in paise and the odd remainder is handed out one at a time, so ₹100 across three people is 33.34 plus 33.33 plus 33.33, never ₹99.99.'],
             ['The fewest transfers', 'Rather than everyone paying everyone, the whole trip collapses into the shortest list of payments that clears the group.'],
