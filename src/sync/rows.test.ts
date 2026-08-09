@@ -1,5 +1,5 @@
 import { tripToPayload, remoteToTrip, RemoteTrip, TripPayload } from './rows';
-import { sampleTrip, Trip } from '../App';
+import { sampleTrip, Trip, Split } from '../App';
 
 // Stands in for what Postgres gives back: the payload plus the server's
 // updated_at, with embedded arrays deliberately shuffled, because PostgREST
@@ -114,6 +114,48 @@ describe('tripToPayload / remoteToTrip round trip', () => {
       ],
     });
     expect(roundTrip(t)).toEqual(t);
+  });
+
+  it('canonicalises split order rather than preserving it, and is stable on a second pass', () => {
+    const asMap = (splits: Split[]): Record<string, number> =>
+      Object.fromEntries(splits.map((s) => [s.memberId, s.amount]));
+
+    const t = base({
+      members: [
+        { id: '22222222-2222-4222-8222-222222222222', name: 'Asha' },
+        { id: '33333333-3333-4333-8333-333333333333', name: 'Bilal' },
+        { id: '66666666-6666-4666-8666-666666666666', name: 'Chetan' },
+      ],
+      expenses: [
+        {
+          id: '44444444-4444-4444-8444-444444444444',
+          title: 'Groceries',
+          payerId: '22222222-2222-4222-8222-222222222222',
+          total: 300,
+          // Deliberately out of member order (Bilal, Chetan, Asha instead of
+          // Asha, Bilal, Chetan) to prove the module canonicalises order
+          // rather than preserving whatever the local array happened to have
+          // — splits are a set keyed by (expense_id, member_id) with no
+          // identity or order of their own.
+          splits: [
+            { memberId: '33333333-3333-4333-8333-333333333333', amount: 100 },
+            { memberId: '66666666-6666-4666-8666-666666666666', amount: 100 },
+            { memberId: '22222222-2222-4222-8222-222222222222', amount: 100 },
+          ],
+          category: 'food',
+          date: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const once = roundTrip(t);
+    // Same set of (member, amount) pairs survives even though array order does not.
+    expect(asMap(once.expenses[0].splits)).toEqual(asMap(t.expenses[0].splits));
+    expect(once.expenses[0].splits).toHaveLength(t.expenses[0].splits.length);
+
+    // A second pass must not keep reshuffling: canonical order is a fixed point.
+    const twice = roundTrip(once);
+    expect(twice).toEqual(once);
   });
 });
 

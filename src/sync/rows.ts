@@ -3,6 +3,12 @@ import { Trip, Member, Expense, Split } from '../App';
 // The wire shapes. snake_case because these cross into Postgres unchanged;
 // the camelCase types in App.tsx stay the app's own vocabulary.
 
+// A row in a splits or payments set. Keyed by (expense_id, member_id) with a
+// unique constraint at the table level and no identity or order of its own —
+// PostgREST makes no promise about the order it returns an embedded resource
+// in. tripToPayload and remoteToTrip both canonicalise AmountRow arrays to the
+// order their members appear in trip.members, so array order is never
+// preserved end to end, only the (member, amount) set is.
 export interface AmountRow {
   member_id: string;
   amount: number;
@@ -59,6 +65,13 @@ const num = (v: number | string): number => Number(v);
 const byPosition = <T extends { position: number }>(a: T, b: T): number => a.position - b.position;
 
 export function tripToPayload(trip: Trip): TripPayload {
+  // See the AmountRow comment: canonicalise splits/payments to member order
+  // here too, not just on the way back, so this function doesn't silently
+  // depend on whatever order the local array happened to be built in.
+  const memberPosition = new Map<string, number>(trip.members.map((m: Member, i: number) => [m.id, i]));
+  const byMemberPosition = (a: { memberId: string }, b: { memberId: string }): number =>
+    (memberPosition.get(a.memberId) ?? 0) - (memberPosition.get(b.memberId) ?? 0);
+
   return {
     id: trip.id,
     name: trip.name,
@@ -79,9 +92,9 @@ export function tripToPayload(trip: Trip): TripPayload {
       category: e.category,
       spent_at: e.date,
       position: i,
-      splits: e.splits.map((s: Split) => ({ member_id: s.memberId, amount: Number(s.amount) })),
+      splits: [...e.splits].sort(byMemberPosition).map((s: Split) => ({ member_id: s.memberId, amount: Number(s.amount) })),
       payments: e.payers
-        ? e.payers.map((p: Split) => ({ member_id: p.memberId, amount: Number(p.amount) }))
+        ? [...e.payers].sort(byMemberPosition).map((p: Split) => ({ member_id: p.memberId, amount: Number(p.amount) }))
         : null,
     })),
   };
@@ -96,11 +109,9 @@ export function remoteToTrip(row: RemoteTrip): Trip {
     return out;
   });
 
-  // Splits and payments are sets keyed by (expense_id, member_id) with no
-  // position column of their own, so PostgREST's embedded order for them is
-  // arbitrary. The app always builds them in member order, so restoring that
-  // order means sorting by the position of the member each row references —
-  // not by the member_id string, which is a random UUID and carries no order.
+  // See the AmountRow comment: canonicalise, don't preserve. Sort by the
+  // position of the member each row references — not by the member_id
+  // string, which is a random UUID and carries no order of its own.
   const memberPosition = new Map<string, number>(row.members.map((m: MemberPayload) => [m.id, m.position]));
   const byMemberPosition = (a: AmountRow, b: AmountRow): number =>
     (memberPosition.get(a.member_id) ?? 0) - (memberPosition.get(b.member_id) ?? 0);
