@@ -89,3 +89,15 @@ export function migrateLegacyIds(trips: Trip[]): Trip[] {
     };
   });
 }
+
+// Two accounts on one browser must never see each other's trips, and signing
+// out must not destroy the anonymous store. Separate keys give both for free:
+// there is no code path that can read the wrong one, because the wrong one is
+// not the key being read.
+export function tripsKey(userId: string | null): string {
+  return userId ? `trips_v1:${userId}` : 'trips_v1';
+}
+
+export function syncKey(userId: string): string {
+  return `hisaab_sync:${userId}`;
+}

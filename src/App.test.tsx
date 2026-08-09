@@ -392,4 +392,20 @@ describe('App', () => {
     expect(saved[0].members[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/i);
     expect(saved[0].createdAt).toBeTruthy();
   });
+
+  it('keeps the anonymous store separate from an account store', () => {
+    localStorage.setItem('hisaab_seen_landing', 'true');
+    localStorage.setItem('trips_v1', JSON.stringify([
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Guest trip', members: [], expenses: [], createdAt: '2026-01-01T00:00:00.000Z' },
+    ]));
+    localStorage.setItem('trips_v1:someone', JSON.stringify([
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Account trip', members: [], expenses: [], createdAt: '2026-01-01T00:00:00.000Z' },
+    ]));
+    render(<App />);
+    // No session in tests, so the anonymous key is the one in use.
+    expect(screen.getByRole('heading', { name: 'Guest trip' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Account trip' })).not.toBeInTheDocument();
+    // And the account store is untouched.
+    expect(JSON.parse(localStorage.getItem('trips_v1:someone')!)[0].name).toBe('Account trip');
+  });
 });

@@ -3,7 +3,7 @@ import Landing from './Landing';
 import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
-import { newId, migrateLegacyIds } from './sync/ids';
+import { newId, migrateLegacyIds, tripsKey } from './sync/ids';
 
 // TypeScript Interfaces
 export interface Member {
@@ -413,14 +413,25 @@ function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: ()
 }
 
 function useLocalState<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [state, setState] = useState<T>(() => {
+  const read = (k: string): T => {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(k);
       return raw ? JSON.parse(raw) : initial;
     } catch (e) {
       return initial;
     }
-  });
+  };
+  const [state, setState] = useState<T>(() => read(key));
+  // The key changes when someone signs in or out, and the state has to follow
+  // it. Without this, a sign-in would write the anonymous trips into the
+  // account's key on the next render.
+  const previousKey = React.useRef(key);
+  useEffect(() => {
+    if (previousKey.current === key) return;
+    previousKey.current = key;
+    setState(read(key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   useEffect(() => {
     localStorage.setItem(key, JSON.stringify(state));
   }, [key, state]);
@@ -1126,7 +1137,8 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
 }
 
 export default function TripExpenseApp() {
-  const [trips, setTrips] = useLocalState<Trip[]>('trips_v1', []);
+  const { user } = useSession();
+  const [trips, setTrips] = useLocalState<Trip[]>(tripsKey(user?.id ?? null), []);
   // Trips saved before uuids existed cannot be written to Postgres, and the
   // rewrite has to happen before anything is pushed. Idempotent, so running
   // it on every mount costs one array scan once the work is done.
@@ -1145,7 +1157,6 @@ export default function TripExpenseApp() {
   // Phones only. On a wide screen every panel is visible at once, so the tabs
   // are hidden and the classes below fall back to lg:block.
   const [tab, setTab] = useState<'people' | 'expenses' | 'settle'>('expenses');
-  const { user } = useSession();
   const [signInReason, setSignInReason] = useState<string | null>(null);
 
   const createTrip = (t: Trip) => setTrips((prev: Trip[]) => [t, ...prev]);

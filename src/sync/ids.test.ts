@@ -1,4 +1,4 @@
-import { newId, isUuid, migrateLegacyIds } from './ids';
+import { newId, isUuid, migrateLegacyIds, tripsKey, syncKey } from './ids';
 import { Trip } from '../App';
 
 const legacy = (): Trip => ({
@@ -99,5 +99,20 @@ describe('migrateLegacyIds', () => {
     delete t.expenses[0].payers;
     const [out] = migrateLegacyIds([t]);
     expect('payers' in out.expenses[0]).toBe(false);
+  });
+});
+
+describe('tripsKey', () => {
+  it('uses the anonymous key when signed out', () => {
+    expect(tripsKey(null)).toBe('trips_v1');
+  });
+
+  it('namespaces by user when signed in, so two accounts never mix', () => {
+    expect(tripsKey('u1')).toBe('trips_v1:u1');
+    expect(tripsKey('u2')).not.toBe(tripsKey('u1'));
+  });
+
+  it('gives the sync state its own namespaced key', () => {
+    expect(syncKey('u1')).toBe('hisaab_sync:u1');
   });
 });
