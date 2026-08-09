@@ -1683,7 +1683,7 @@ export default function TripExpenseApp() {
           theme={theme}
           onToggleTheme={toggleTheme}
           signedIn={!!user}
-          onSignIn={isBackendConfigured ? () => setSignInReason('Keep your trips across devices.') : undefined}
+          onSignIn={() => setSignInReason('Keep your trips across devices.')}
           onStart={() => { navigate({ name: 'trips' }); setShowLoader(true); }}
         />
         {signInReason !== null && (
