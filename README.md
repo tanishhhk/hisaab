@@ -141,8 +141,8 @@ fail, the eighth must succeed.
 ## Getting started
 
 ```bash
-git clone https://github.com/tanishhhk/expense-tracker.git
-cd expense-tracker
+git clone https://github.com/tanishhhk/hisaab.git
+cd hisaab
 npm install
 npm start
 ```
