@@ -51,18 +51,25 @@ begin
   returning updated_at into stamp;
 
   -- members.id and expenses.id are client-supplied primary keys, global
-  -- across every trip rather than scoped to this one. Without the trip_id
-  -- guard below, a caller could name a member or expense id that belongs to
-  -- someone else's trip and this upsert would silently overwrite it -- the
-  -- same id-guessing attack the trip-level owner check above exists to stop,
-  -- one level down where nothing else was checking for it. The guard turns a
-  -- foreign-trip id collision into a no-op instead of a write.
+  -- across every trip rather than scoped to this one. A caller could name a
+  -- member or expense id that belongs to someone else's trip -- the same
+  -- id-guessing attack the trip-level owner check above exists to stop, one
+  -- level down where nothing else was checking for it. The arbiter below is
+  -- the composite (id, trip_id) key from 0002, not the bare id primary key,
+  -- so a foreign-trip id does not count as a conflict under it: the insert
+  -- proceeds and hits the plain primary key instead, aborting the whole save
+  -- loudly. That is deliberately louder than the where clause alone would be
+  -- -- ON CONFLICT (id) DO UPDATE ... WHERE false is a silent no-op, which
+  -- for a member the caller just added and has nothing else pointing at yet
+  -- would mean the save reports success, stamps a fresh updated_at, and that
+  -- incomplete state wins on every other device. The where clause stays too:
+  -- harmless on a genuine same-trip conflict, and it documents the intent.
   insert into public.members (id, trip_id, name, active, position)
   select (m->>'id')::uuid, tid, m->>'name',
          coalesce((m->>'active')::boolean, true),
          coalesce((m->>'position')::int, 0)
     from jsonb_array_elements(coalesce(payload->'members', '[]'::jsonb)) m
-  on conflict (id) do update
+  on conflict (id, trip_id) do update
      set name = excluded.name,
          active = excluded.active,
          position = excluded.position
@@ -75,7 +82,7 @@ begin
          coalesce((e->>'spent_at')::timestamptz, now()),
          coalesce((e->>'position')::int, 0)
     from jsonb_array_elements(coalesce(payload->'expenses', '[]'::jsonb)) e
-  on conflict (id) do update
+  on conflict (id, trip_id) do update
      set title = excluded.title,
          payer_id = excluded.payer_id,
          total = excluded.total,
@@ -102,7 +109,14 @@ begin
   insert into public.payments (expense_id, trip_id, member_id, amount)
   select (e->>'id')::uuid, tid, (p->>'member_id')::uuid, (p->>'amount')::numeric
     from jsonb_array_elements(coalesce(payload->'expenses', '[]'::jsonb)) e,
-         jsonb_array_elements(coalesce(e->'payments', '[]'::jsonb)) p;
+         -- payments is the one field the client sends as a literal JSON
+         -- null (see src/sync/rows.ts) rather than an absent key, to mean
+         -- "one payer covered the whole total". e->'payments' then yields the
+         -- jsonb scalar 'null', not SQL NULL, which coalesce alone would pass
+         -- straight through into jsonb_array_elements and raise "cannot
+         -- extract elements from a scalar". nullif catches that scalar and
+         -- turns it into SQL NULL first, so coalesce can do its job.
+         jsonb_array_elements(coalesce(nullif(e->'payments', 'null'::jsonb), '[]'::jsonb)) p;
 
   -- Rows the payload no longer contains. Children first: expenses.payer_id
   -- and splits.member_id are on delete restrict, so a member cannot go until
@@ -135,12 +149,19 @@ as $$
 declare
   caller uuid := auth.uid();
   holder uuid;
+  -- Every child table also has a column named trip_id, so a bare trip_id
+  -- reference below would be ambiguous between the parameter and the column
+  -- under the default plpgsql.variable_conflict = error, and the function
+  -- would raise on every call. Copying the parameter into a local with a
+  -- distinct name (as save_trip already does with tid) sidesteps that
+  -- without renaming the parameter itself, which is part of the RPC's API.
+  tid    uuid := trip_id;
 begin
   if caller is null then
     raise exception 'not signed in';
   end if;
 
-  select owner into holder from public.trips where id = trip_id;
+  select owner into holder from public.trips where id = tid;
   if not found then
     -- Already gone. Silent success, so a retried tombstone settles instead of
     -- failing forever.
@@ -153,11 +174,11 @@ begin
   -- Children first, for the same on delete restrict reason as above. The
   -- trips cascade would handle members and expenses, but not the restrict
   -- edges between them.
-  delete from public.payments where trip_id = delete_trip.trip_id;
-  delete from public.splits   where trip_id = delete_trip.trip_id;
-  delete from public.expenses where trip_id = delete_trip.trip_id;
-  delete from public.members  where trip_id = delete_trip.trip_id;
-  delete from public.trips    where id = delete_trip.trip_id;
+  delete from public.payments where trip_id = tid;
+  delete from public.splits   where trip_id = tid;
+  delete from public.expenses where trip_id = tid;
+  delete from public.members  where trip_id = tid;
+  delete from public.trips    where id = tid;
 end;
 $$;
 
