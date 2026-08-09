@@ -14,16 +14,14 @@ import ThemeToggle from './ThemeToggle';
 // read on a phone without scrolling past the joke. It ends warm on purpose:
 // the trip was good, the arithmetic is the only thing that went wrong.
 const CHAT: { from: string; text: string; mine?: boolean }[] = [
-  { from: 'Rohan', text: 'guys settle up karo, I paid for the hotel' },
-  { from: 'Asha', text: 'how much' },
-  { from: 'Rohan', text: '8600. two nights' },
-  { from: 'Divya', text: 'I paid 1450 for breakfast btw' },
-  { from: 'Chetan', text: 'cab to the fort was 3500, that was me' },
-  { from: 'Asha', text: 'wait was Divya even in the cab' },
-  { from: 'Divya', text: 'no I slept in' },
-  { from: 'You', text: 'so do I owe Rohan or Chetan', mine: true },
-  { from: 'Asha', text: 'yes' },
-  { from: 'Chetan', text: 'great trip tho' },
+  { from: 'Rohan', text: 'guys hotel ₹8,600, I paid' },
+  { from: 'Asha', text: 'how much do I owe?' },
+  { from: 'Divya', text: 'I paid ₹1,450 for breakfast btw' },
+  { from: 'Chetan', text: 'fort cab was ₹3,500, I paid' },
+  { from: 'Asha', text: 'Divya was in the cab?' },
+  { from: 'Divya', text: 'no 😭 I was sleeping' },
+  { from: 'You', text: 'wait so who do I pay?', mine: true },
+  { from: 'Rohan', text: 'bro idk 😂' },
 ];
 
 const SETTLEMENT = [
