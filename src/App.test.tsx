@@ -10,6 +10,7 @@ import App, {
   removalImpact,
   payersOf,
   sampleTrip,
+  shortNames,
   validateExpense,
   Expense,
   Trip,
@@ -80,6 +81,42 @@ describe('isEqualSplit', () => {
 
   it('treats a single participant as equal', () => {
     expect(isEqualSplit(expense({ splits: [{ memberId: 'a', amount: 100 }] }))).toBe(true);
+  });
+});
+
+describe('shortNames', () => {
+  it('uses first names when they are unambiguous', () => {
+    const m = shortNames(['Pratyaksha Singh', 'Tanishk Jain', 'Vidhi Pandey']);
+    expect(m.get('Pratyaksha Singh')).toBe('Pratyaksha');
+    expect(m.get('Tanishk Jain')).toBe('Tanishk');
+  });
+
+  it('adds a surname initial when two people share a first name', () => {
+    const m = shortNames(['Pratyaksha Singh', 'Pratyaksha Mehta']);
+    expect(m.get('Pratyaksha Singh')).toBe('Pratyaksha S.');
+    expect(m.get('Pratyaksha Mehta')).toBe('Pratyaksha M.');
+  });
+
+  it('keeps the full name when a shared first name has no surname to add', () => {
+    // Shortening here would print the same label twice, which is worse than
+    // being long: the row would say Rahul pays Rahul.
+    const m = shortNames(['Rahul', 'Rahul Verma']);
+    expect(m.get('Rahul')).toBe('Rahul');
+    expect(m.get('Rahul Verma')).toBe('Rahul V.');
+  });
+
+  it('leaves a single-word name alone', () => {
+    expect(shortNames(['Asha']).get('Asha')).toBe('Asha');
+  });
+
+  it('is case insensitive about collisions', () => {
+    const m = shortNames(['asha kumar', 'Asha Roy']);
+    expect(m.get('asha kumar')).toBe('asha K.');
+    expect(m.get('Asha Roy')).toBe('Asha R.');
+  });
+
+  it('tolerates extra whitespace', () => {
+    expect(shortNames(['  Divya   Pandey  ']).get('  Divya   Pandey  ')).toBe('Divya');
   });
 });
 

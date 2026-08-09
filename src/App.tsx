@@ -167,6 +167,34 @@ export function isActive(m: Member): boolean {
   return m.active !== false;
 }
 
+// A settle-up row has to fit two names, an arrow and an amount on a phone, so
+// it shows first names. Ambiguity is resolved by adding as much of the surname
+// as it takes: two Pratyakshas become "Pratyaksha S." and "Pratyaksha M."
+// Falls back to the full name when the first names collide and there is no
+// surname to tell them apart, because a wrong-but-short name is worse than a
+// long one.
+export function shortNames(full: string[]): Map<string, string> {
+  const firstOf = (n: string) => n.trim().split(/\s+/)[0] || n.trim();
+  const counts = new Map<string, number>();
+  full.forEach((n) => {
+    const f = firstOf(n).toLowerCase();
+    counts.set(f, (counts.get(f) ?? 0) + 1);
+  });
+
+  const out = new Map<string, string>();
+  full.forEach((n) => {
+    const parts = n.trim().split(/\s+/);
+    const first = parts[0] || n.trim();
+    if ((counts.get(first.toLowerCase()) ?? 0) < 2) {
+      out.set(n, first);
+      return;
+    }
+    const surname = parts[1];
+    out.set(n, surname ? `${first} ${surname[0].toUpperCase()}.` : n.trim());
+  });
+  return out;
+}
+
 // An expense counts as "equally distributed" when its shares are all within a
 // paisa of each other, which is exactly what allocateEqually produces. This is
 // derived rather than stored so trips saved before this change classify too.
@@ -745,6 +773,19 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
   const [splitPayment, setSplitPayment] = useState<boolean>(false);
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [showInvoice, setShowInvoice] = useState(false);
+  // The exact split the receipt shows, produced by the same function that
+  // will store it. Empty while there is no amount yet, so the preview says
+  // nothing rather than a column of zeros.
+  const previewAmount = Number(total);
+  const previewSplits: Split[] =
+    !Number.isFinite(previewAmount) || previewAmount <= 0
+      ? []
+      : method === 'equal'
+      ? allocateEqually(previewAmount, selected)
+      : selected
+          .map((id: string) => ({ memberId: id, amount: Number(customSplits[id]) || 0 }))
+          .filter((x: Split) => x.amount > 0);
+
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const downloadReceipt = async () => {
@@ -1123,13 +1164,16 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
                 <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">{new Date().toLocaleDateString()}</p>
               </div>
 
+              {/* The preview has to show what will actually be saved, so it
+                  runs the same allocation the app runs. Dividing by hand and
+                  rounding each row to two places made the receipt disagree
+                  with the ledger: three ways on 100 read 33.33 three times,
+                  totalling 99.99, while the saved split is 33.34 + 33.33 +
+                  33.33. A preview that lies is worse than no preview. */}
               <div className="divide-y-2 divide-dashed divide-[#ccc]">
-                {selected.map(id => {
+                {previewSplits.map(({ memberId: id, amount: amt }) => {
                   const m = members.find(x => x.id === id);
                   if (!m) return null;
-                  let amt = 0;
-                  if (method === 'equal') amt = Number(total) / selected.length || 0;
-                  else amt = Number(customSplits[id]) || 0;
 
                   return (
                     <div key={id} className="py-6">
@@ -1148,6 +1192,11 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
                     </div>
                   );
                 })}
+                {previewSplits.length === 0 && (
+                  <p className="py-8 text-center text-xs uppercase tracking-[0.1em] text-[#888]">
+                    Enter an amount to see the split
+                  </p>
+                )}
               </div>
 
               <div className="border-t-2 border-dashed border-[#ccc] pt-6">
@@ -1349,6 +1398,9 @@ function SummaryPanel({ trip, onSettle }: SummaryPanelProps) {
   }
 
   const settle = settlements();
+  // Built from the ledger roster, not just the people in a transfer, so the
+  // same person reads the same way everywhere on this panel.
+  const short = shortNames(members.map((m: Member) => m.name));
   const totalTrip = trip.expenses.reduce((s: number, e: Expense) => s + Number(e.total), 0);
   const involvedCount = trip.members.filter(m => (totalsByMemberPaid[m.id] || 0) > 0 || (totalsByMemberOwed[m.id] || 0) > 0).length;
   const perHead = involvedCount ? totalTrip / involvedCount : 0;
@@ -1373,11 +1425,11 @@ function SummaryPanel({ trip, onSettle }: SummaryPanelProps) {
                   className="flex items-center justify-between gap-3 rounded-xl bg-sunken px-4 py-3"
                 >
                   <span className="flex min-w-0 items-center gap-2 font-medium text-ink">
-                    <span className="truncate">{s.from}</span>
+                    <span className="truncate" title={s.from}>{short.get(s.from) ?? s.from}</span>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0 text-ink-subtle">
                       <path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    <span className="truncate">{s.to}</span>
+                    <span className="truncate" title={s.to}>{short.get(s.to) ?? s.to}</span>
                   </span>
                   <span className="shrink-0 whitespace-nowrap text-lg font-semibold tnum text-ink">
                     ₹{currency(s.amount)}
