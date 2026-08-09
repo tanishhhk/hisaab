@@ -3,6 +3,7 @@ import Landing from './Landing';
 import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
+import { newId, migrateLegacyIds } from './sync/ids';
 
 // TypeScript Interfaces
 export interface Member {
@@ -97,10 +98,6 @@ interface SummaryPanelProps {
 
 // Data model (saved to localStorage):
 // trips: [{ id, name, members: [{id,name}], expenses: [{id, title, payerId, total, splits: [{memberId, amount}], category, date}] }]
-
-function uid(prefix: string = ''): string {
-  return prefix + Math.random().toString(36).slice(2, 9);
-}
 
 // Display formatting only. Groups digits the Indian way (₹1,69,500.00), which
 // is what these amounts are read in. Never parse this back into a number,
@@ -327,7 +324,7 @@ export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; split
 // on real numbers instead of staring at an empty screen. Built through
 // allocateEqually so the sample obeys the same rules as anything they enter.
 export function sampleTrip(): Trip {
-  const m = (name: string): Member => ({ id: uid('m_'), name });
+  const m = (name: string): Member => ({ id: newId(), name });
   const [asha, bilal, chetan, divya] = [m('Asha'), m('Bilal'), m('Chetan'), m('Divya')];
   const members = [asha, bilal, chetan, divya];
   const all = members.map((x: Member) => x.id);
@@ -337,10 +334,11 @@ export function sampleTrip(): Trip {
   const expense = (
     title: string, payer: Member, total: number,
     splits: Split[], category: string, offset: number
-  ): Expense => ({ id: uid('e_'), title, payerId: payer.id, total, splits, category, date: day(offset) });
+  ): Expense => ({ id: newId(), title, payerId: payer.id, total, splits, category, date: day(offset) });
 
   return {
-    id: uid('t_'),
+    id: newId(),
+    createdAt: new Date().toISOString(),
     name: 'Indore Weekend (sample)',
     members,
     expenses: [
@@ -502,7 +500,7 @@ function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
 
   const create = () => {
     if (!name.trim()) return setError('Give the trip a name.');
-    onCreate({ id: uid('t_'), name: name.trim(), members: [], expenses: [] });
+    onCreate({ id: newId(), name: name.trim(), members: [], expenses: [], createdAt: new Date().toISOString() });
     onClose();
   };
 
@@ -649,7 +647,7 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
           className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
           onClick={() => { 
             if (!name.trim()) return; 
-            addMember({ id: uid('m_'), name: name.trim() }); 
+            addMember({ id: newId(), name: name.trim() });
             setName(''); 
           }}
         >
@@ -731,7 +729,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
     if (Object.keys(found).length > 0) return;
 
     onAdd({
-      id: uid('e_'),
+      id: newId(),
       title: title.trim(),
       // The first payer stays in payerId so anything reading the old field
       // still sees a real person rather than an empty string.
@@ -1129,6 +1127,12 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
 
 export default function TripExpenseApp() {
   const [trips, setTrips] = useLocalState<Trip[]>('trips_v1', []);
+  // Trips saved before uuids existed cannot be written to Postgres, and the
+  // rewrite has to happen before anything is pushed. Idempotent, so running
+  // it on every mount costs one array scan once the work is done.
+  useEffect(() => {
+    setTrips((prev: Trip[]) => migrateLegacyIds(prev));
+  }, [setTrips]);
   const [showNew, setShowNew] = useState<boolean>(false);
   const [openTripId, setOpenTripId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Member | null>(null);

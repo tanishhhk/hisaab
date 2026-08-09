@@ -370,4 +370,26 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Hisaab' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create your first trip/i })).toBeInTheDocument();
   });
+
+  it('migrates legacy ids in stored trips on load', () => {
+    localStorage.setItem('hisaab_seen_landing', 'true');
+    localStorage.setItem(
+      'trips_v1',
+      JSON.stringify([
+        {
+          id: 't_old1',
+          name: 'Legacy trip',
+          members: [{ id: 'm_a', name: 'Asha' }],
+          expenses: [],
+        },
+      ])
+    );
+    render(<App />);
+    expect(screen.getByRole('heading', { name: 'Legacy trip' })).toBeInTheDocument();
+    const saved = JSON.parse(localStorage.getItem('trips_v1')!);
+    expect(saved[0].id).not.toBe('t_old1');
+    expect(saved[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    expect(saved[0].members[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    expect(saved[0].createdAt).toBeTruthy();
+  });
 });
