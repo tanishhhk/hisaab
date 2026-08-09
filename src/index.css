@@ -118,10 +118,18 @@ body {
   isolation: isolate;
 }
 
+/* Ruled paper belongs to the hero, where it reads as a ledger. It used to be
+   position: fixed, so it stayed pinned to the viewport for the entire page —
+   every paragraph further down was crossed by a rule at some arbitrary offset,
+   which made ordinary body text look like a spec sheet. Anchoring it to the
+   top of the document instead lets it scroll away once the hero is done. */
 .ledger-ground::before {
   content: '';
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
   z-index: -1;
   pointer-events: none;
   background-image:
@@ -139,9 +147,9 @@ body {
 /* The margin rule, in the accent, exactly where a ledger would carry it. */
 .ledger-ground::after {
   content: '';
-  position: fixed;
+  position: absolute;
   top: 0;
-  bottom: 0;
+  height: 100vh;
   left: max(1.5rem, calc(50vw - 34rem));
   width: 1px;
   z-index: -1;
@@ -153,4 +161,15 @@ body {
 
 @media (max-width: 640px) {
   .ledger-ground::after { display: none; }
+}
+
+/* Stacked, the thread has to be cut off somewhere. Clipping it with a fade
+   rather than deleting messages keeps the point of the scene — that the chat
+   goes on and on — while giving the answer below it room to arrive. */
+@media (max-width: 1023px) {
+  .chat-fade {
+    max-height: 21rem;
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black 62%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 0%, black 62%, transparent 100%);
+  }
 }

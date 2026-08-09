@@ -287,6 +287,23 @@ function Feedback() {
 // Edge fire beforeinstallprompt when the app qualifies; we hold that event and
 // spend it on a real button. iOS Safari never fires it, so that case falls back
 // to naming the actual gesture rather than pretending a button exists.
+// Matches the lg: breakpoint the layout classes use, so the motion and the
+// grid agree about which arrangement is on screen.
+function useWide(): boolean {
+  const query = '(min-width: 1024px)';
+  const [wide, setWide] = React.useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches
+  );
+  React.useEffect(() => {
+    const mq = window.matchMedia(query);
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  return wide;
+}
+
 function InstallBand() {
   const [prompt, setPrompt] = React.useState<any>(null);
   const [installed, setInstalled] = React.useState(false);
@@ -408,7 +425,13 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
   const answerY = useTransform(p, [0.3, 0.6], [22, 0]);
   const answerScale = useTransform(p, [0.3, 0.6], [0.975, 1]);
 
-  const still = reduce ? {} : undefined;
+  // The pinned substitution needs a tall viewport and two columns to read. On a
+  // phone there is room for the text or the chat, never both, so the scroll
+  // scrub is switched off and the section plays out as ordinary stacked
+  // content. Without this the answer card stays at opacity 0, because its
+  // opacity is driven by a scroll range that no longer exists.
+  const wide = useWide();
+  const still = reduce || !wide ? {} : undefined;
 
   return (
     <div className="ledger-ground min-h-screen bg-canvas text-ink">
@@ -499,8 +522,8 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
       </section>
 
       {/* The turn. One long scroll in which the mess is replaced by the answer. */}
-      <section ref={turnRef} className="relative h-[200vh]">
-        <div className="sticky top-0 flex h-screen items-center overflow-hidden">
+      <section ref={turnRef} className="relative lg:h-[200vh]">
+        <div className="py-20 lg:sticky lg:top-0 lg:flex lg:h-screen lg:items-center lg:overflow-hidden lg:py-0">
           <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-2 lg:items-center">
             <div>
               <h2 className="max-w-[15ch] font-display text-[clamp(1.9rem,4.4vw,3.25rem)] font-semibold leading-[1.02] tracking-tighter">
@@ -519,10 +542,15 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
               </motion.p>
             </div>
 
-            <div className="relative grid h-[58vh] min-h-[400px] place-items-center">
+            {/* Two states of one idea. On a wide screen they occupy the same
+                cell and cross-fade under the scroll. Stacked, they simply
+                follow one another, because a phone cannot hold both at once
+                and centring a 12-message thread in a fixed-height cell made it
+                bleed upward over the paragraph. */}
+            <div className="relative flex flex-col gap-8 lg:grid lg:h-[58vh] lg:min-h-[400px] lg:place-items-center lg:gap-0">
               <motion.div
                 style={still ?? { y: chatY, opacity: chatOpacity, filter: chatBlur }}
-                className="col-start-1 row-start-1 w-full space-y-2 self-center overflow-hidden"
+                className="chat-fade w-full space-y-2 overflow-hidden lg:col-start-1 lg:row-start-1 lg:self-center"
                 aria-hidden
               >
                 {CHAT.map((c, i) => (
@@ -532,7 +560,7 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
 
               <motion.div
                 style={still ?? { opacity: answerOpacity, y: answerY, scale: answerScale }}
-                className="col-start-1 row-start-1 w-full self-center"
+                className="w-full lg:col-start-1 lg:row-start-1 lg:self-center"
               >
                 <div className="rounded-2xl border border-rule bg-surface p-6">
                   <p className="text-sm text-ink-muted">Everyone settles with one payment.</p>
@@ -585,7 +613,8 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-rule px-6 py-5 sm:px-8">
             <h3 className="font-display text-xl tracking-tight">One dinner bill</h3>
             <span className="tnum text-ink-muted">
-              &#8377;2,100.00 of food plus &#8377;105.00 tax
+              <span className="whitespace-nowrap">&#8377;2,100.00 of food</span>{' '}
+              <span className="whitespace-nowrap">plus &#8377;105.00 tax</span>
             </span>
           </div>
 
@@ -618,22 +647,37 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
                   <span className="text-sm text-ink-subtle">{g.ate}</span>
                 </div>
 
+                {/* Each operator travels with the term it introduces. Left
+                    loose they wrapped to the end of a line, so a row could
+                    finish on a stranded "+" and the equation stopped reading
+                    as arithmetic. */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 tnum text-[0.95rem]">
                   <span className="rounded-full bg-sunken px-3 py-1.5">
                     &#8377;{g.food} <span className="text-ink-subtle">of food</span>
                   </span>
-                  <span className="text-ink-subtle">+</span>
-                  <span className="rounded-full bg-sunken px-3 py-1.5">
-                    &#8377;{g.tax} <span className="text-ink-subtle">tax</span>
+                  <span className="flex items-center gap-2.5 whitespace-nowrap">
+                    <span className="text-ink-subtle">+</span>
+                    <span className="rounded-full bg-sunken px-3 py-1.5">
+                      &#8377;{g.tax} <span className="text-ink-subtle">tax</span>
+                    </span>
                   </span>
-                  <span className="text-ink-subtle">=</span>
-                  <span className="rounded-full bg-sunken px-3 py-1.5">&#8377;{g.sum}</span>
+                  <span className="flex items-center gap-2.5 whitespace-nowrap">
+                    <span className="text-ink-subtle">=</span>
+                    <span className="rounded-full bg-sunken px-3 py-1.5">&#8377;{g.sum}</span>
+                  </span>
                   <span className="text-ink-subtle">shared by {g.by}</span>
-                  <span className="text-ink-subtle">=</span>
-                  <span className="font-display text-2xl tracking-tight text-ink">
-                    &#8377;{g.each}
+
+                  {/* The result and its unit are one phrase and must never
+                      split. Wrapping is what left "each" stranded on a line of
+                      its own; giving the group its own row on a phone lets the
+                      sentence actually resolve. */}
+                  <span className="flex w-full items-baseline gap-2 whitespace-nowrap pt-1 sm:w-auto sm:pt-0">
+                    <span className="text-ink-subtle">=</span>
+                    <span className="font-display text-2xl tracking-tight text-ink">
+                      &#8377;{g.each}
+                    </span>
+                    <span className="text-ink-subtle">each</span>
                   </span>
-                  <span className="text-ink-subtle">each</span>
                 </div>
               </div>
             ))}
@@ -655,7 +699,10 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           We would rather put it in the arithmetic.
         </p>
 
-        <div className="mt-9 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Stacked on a phone these ran together as one grey column, so each
+            proof gets a rule and real breathing room. The dividers disappear
+            once the grid has columns to do that work instead. */}
+        <div className="mt-9 grid divide-y divide-rule sm:grid-cols-2 sm:gap-x-10 sm:gap-y-9 sm:divide-y-0 lg:grid-cols-3">
           {[
             ['Nothing goes missing in the rounding', 'Shares are worked out in paise and the odd remainder is handed out one at a time, so ₹100 across three people is 33.34 plus 33.33 plus 33.33, never ₹99.99.'],
             ['The fewest transfers', 'Rather than everyone paying everyone, the whole trip collapses into the shortest list of payments that clears the group.'],
@@ -670,8 +717,9 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-80px' }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              className="py-7 first:pt-0 sm:py-0"
             >
-              <h3 className="font-display text-lg font-semibold tracking-tight">{title}</h3>
+              <h3 className="font-display text-xl font-semibold tracking-tight sm:text-lg">{title}</h3>
               <p className="mt-2 max-w-[42ch] text-[0.95rem] leading-relaxed text-ink-muted">{body}</p>
             </motion.div>
           ))}
