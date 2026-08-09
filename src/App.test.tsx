@@ -361,7 +361,7 @@ describe('App', () => {
     render(<App />);
     expect(screen.getByRole('heading', { name: /the hisaab is not/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /start a trip/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /show me/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /settle up/i })).toBeInTheDocument();
   });
 
   it('shows the app itself once the landing page has been passed', () => {

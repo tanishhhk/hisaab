@@ -500,9 +500,8 @@ function ChatBubble({ from, text, mine }: { from: string; text: string; mine?: b
   );
 }
 
-export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, onToggleTheme }: {
+export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTheme }: {
   onStart: () => void;
-  onSample: () => void;
   onSignIn?: () => void;
   signedIn?: boolean;
   theme: 'light' | 'dark';
@@ -595,19 +594,11 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
           transition={{ duration: 0.7, delay: 0.22, ease: [0.16, 1, 0.3, 1] }}
           className="mt-8 flex items-center gap-2.5 sm:gap-3"
         >
-          {/* One row at every width. Wrapped, the second button dropped under
-              the first and the pair stopped reading as a choice. */}
           <button
             onClick={onStart}
-            className="whitespace-nowrap rounded-full bg-ink px-5 py-3 text-[0.95rem] font-medium text-canvas transition-colors hover:bg-ink/88 sm:px-6 sm:text-base"
+            className="whitespace-nowrap rounded-full bg-ink px-6 py-3 font-medium text-canvas transition-colors hover:bg-ink/88"
           >
             Start a trip
-          </button>
-          <button
-            onClick={onSample}
-            className="whitespace-nowrap rounded-full border border-rule-strong px-5 py-3 text-[0.95rem] font-medium transition-colors hover:bg-sunken sm:px-6 sm:text-base"
-          >
-            Show me
           </button>
         </motion.div>
 

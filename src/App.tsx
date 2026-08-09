@@ -353,7 +353,7 @@ export function sampleTrip(): Trip {
   };
 }
 
-function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: () => void }) {
+function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-rule bg-surface">
       <div className="grid gap-8 p-8 sm:p-12 lg:grid-cols-2 lg:items-center">
@@ -365,18 +365,12 @@ function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: ()
             Add everyone who came, log what each person paid, and get the shortest
             list of transfers that squares the whole group up.
           </p>
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="mt-7">
             <button
               className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 font-medium text-canvas transition-colors hover:bg-ink/88"
               onClick={onCreate}
             >
               Create your first trip
-            </button>
-            <button
-              className="inline-flex items-center justify-center rounded-full border border-rule-strong px-5 py-2.5 font-medium text-ink transition-colors hover:bg-sunken"
-              onClick={onSample}
-            >
-              Try a sample trip
             </button>
           </div>
         </div>
@@ -1271,15 +1265,6 @@ export default function TripExpenseApp() {
     setPendingRemoval(null);
   };
 
-  // Seed a worked example and open it straight away. The point is to show the
-  // settlement output, not to leave another empty trip on the list.
-  const loadSample = () => {
-    const t = sampleTrip();
-    setTrips((prev: Trip[]) => [stampNow(t), ...prev]);
-    sync.markDirty(t.id);
-    setOpenTripId(t.id);
-  };
-
   // Offer to adopt anonymous trips, but only once the pull has settled. The
   // anonymous store is never modified, so declining costs nothing.
   useEffect(() => {
@@ -1346,7 +1331,6 @@ export default function TripExpenseApp() {
           signedIn={!!user}
           onSignIn={isBackendConfigured ? () => setSignInReason('Keep your trips across devices.') : undefined}
           onStart={() => { setSeenLanding(true); setShowNew(true); }}
-          onSample={() => { setSeenLanding(true); loadSample(); }}
         />
         {signInReason !== null && (
           <Modal onClose={() => setSignInReason(null)} labelledBy="signin-title" width="max-w-md">
@@ -1447,7 +1431,7 @@ export default function TripExpenseApp() {
             answer is not yet known. */}
         {!current && trips.length === 0 && !sync.skeleton && !sync.pullFailed && sync.hydrated && (
           <main>
-            <EmptyState onCreate={() => setShowNew(true)} onSample={loadSample} />
+            <EmptyState onCreate={() => setShowNew(true)} />
           </main>
         )}
 
