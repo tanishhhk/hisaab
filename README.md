@@ -174,6 +174,34 @@ Then apply the migrations, in order, in the Supabase SQL Editor:
 
 Sign-in is a six digit code by email. No password to choose, forget, or reset.
 
+### Custom SMTP is required, not optional
+
+Supabase's built-in email sender cannot be used here, for two reasons: it locks
+template editing, and the app needs a template change to work at all. The stock
+templates send `{{ .ConfirmationURL }}`, a magic link, while Hisaab asks for the
+six digits in `{{ .Token }}`. The built-in sender is also rate limited to a
+handful of messages an hour and is not meant for production.
+
+1. Connect a sender under **Project Settings → Authentication → SMTP Settings**.
+   Resend suits a project with its own domain; Brevo allows a single verified
+   address without one.
+2. Editing then unlocks under **Authentication → Emails**. Change **both**
+   *Confirm signup* and *Magic Link* to send the token:
+
+   ```html
+   <h2>Your Hisaab code</h2>
+   <p style="font-size:32px;letter-spacing:8px;font-weight:700">{{ .Token }}</p>
+   <p>Enter it in Hisaab to finish signing in. It expires in an hour.</p>
+   ```
+
+   Both, because `signInWithOtp` with `shouldCreateUser` sends *Confirm signup*
+   to a new address and *Magic Link* to a returning one. Editing only the second
+   works for existing accounts and fails for every new user.
+3. Raise the email limit under **Authentication → Rate Limits**.
+
+Clicking a link still works if one ever arrives: `detectSessionInUrl` is on, so
+the token in the URL is honoured rather than silently ignored.
+
 ---
 
 ## Before going live
@@ -190,9 +218,12 @@ Sign-in is a six digit code by email. No password to choose, forget, or reset.
   ```
 
 - [ ] `supabase/tests/hostile.sql` run. Seven blocks fail, the eighth succeeds.
+- [ ] Custom SMTP connected, and **both** email templates switched to
+  `{{ .Token }}`. Without this the built-in sender mails a magic link instead
+  of the code the app asks for, and caps out after a few messages an hour.
 - [ ] **Email confirmations on** under Authentication → Providers, and auth
-  rate limits left at their defaults. The anon key is public by design, so
-  these are what stop it being used to spam sign-ups.
+  rate limits reviewed. The anon key is public by design, so these are what
+  stop it being used to spam sign-ups.
 - [ ] Signed in on a real device: create a trip, add a multi-payer expense,
   reload, and confirm the header reads *Synced to your account*.
 - [ ] `GENERATE_SOURCEMAP=false` still set in `.env.production`, so the build
