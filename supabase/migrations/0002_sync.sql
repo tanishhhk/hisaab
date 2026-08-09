@@ -260,6 +260,13 @@ create trigger trips_owner_frozen before update on public.trips
 create or replace function public.cap_trips() returns trigger
 language plpgsql as $$
 begin
+  -- save_trip upserts the trip on every save, and a BEFORE INSERT trigger
+  -- fires before ON CONFLICT resolves. Without this early return, an owner
+  -- at the cap could never save any trip again: re-inserting an existing
+  -- trip would trip the limit that the trip itself is already part of.
+  if exists (select 1 from public.trips where id = new.id) then
+    return new;
+  end if;
   if (select count(*) from public.trips where owner = new.owner) >= 200 then
     raise exception 'a single account is limited to 200 trips';
   end if;
@@ -270,6 +277,13 @@ $$;
 create or replace function public.cap_members() returns trigger
 language plpgsql as $$
 begin
+  -- save_trip upserts every member on every save, and a BEFORE INSERT
+  -- trigger fires before ON CONFLICT resolves. Without this early return, a
+  -- trip that reached the cap could never be saved again: re-inserting an
+  -- existing member would trip the limit that the member itself is part of.
+  if exists (select 1 from public.members where id = new.id) then
+    return new;
+  end if;
   if (select count(*) from public.members where trip_id = new.trip_id) >= 100 then
     raise exception 'a single trip is limited to 100 members';
   end if;
@@ -280,6 +294,13 @@ $$;
 create or replace function public.cap_expenses() returns trigger
 language plpgsql as $$
 begin
+  -- save_trip upserts every expense on every save, and a BEFORE INSERT
+  -- trigger fires before ON CONFLICT resolves. Without this early return, a
+  -- trip that reached the cap could never be saved again: re-inserting an
+  -- existing expense would trip the limit that the expense itself is part of.
+  if exists (select 1 from public.expenses where id = new.id) then
+    return new;
+  end if;
   if (select count(*) from public.expenses where trip_id = new.trip_id) >= 5000 then
     raise exception 'a single trip is limited to 5000 expenses';
   end if;
