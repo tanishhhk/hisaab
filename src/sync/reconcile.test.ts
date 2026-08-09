@@ -95,4 +95,15 @@ describe('reconcile', () => {
     );
     expect(r.trips.map((t) => t.id)).toEqual(['new', 'old']);
   });
+
+  it('sorts a trip with no createdAt after one that has it', () => {
+    // Fed to the sort in this order (no-date before has-date) so a
+    // NaN-comparator bug — which tends to leave the array untouched — would
+    // fail this assertion instead of passing it by accident.
+    const noDate = trip('no-date');
+    delete noDate.createdAt;
+    const hasDate = trip('has-date', { createdAt: '2026-01-01T00:00:00.000Z' });
+    const r = reconcile([noDate, hasDate], [], clean);
+    expect(r.trips.map((t) => t.id)).toEqual(['has-date', 'no-date']);
+  });
 });

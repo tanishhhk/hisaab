@@ -18,6 +18,8 @@ export interface Reconciled {
 const stamp = (t: Trip | undefined): number =>
   t?.updatedAt ? Date.parse(t.updatedAt) : 0;
 
+const created = (t: Trip): number => (t.createdAt ? Date.parse(t.createdAt) : 0);
+
 export function reconcile(local: Trip[], remote: Trip[], state: SyncState): Reconciled {
   const dirty = new Set(state.dirty);
   const deleted = new Set(state.deleted);
@@ -70,10 +72,7 @@ export function reconcile(local: Trip[], remote: Trip[], state: SyncState): Reco
     }
   });
 
-  trips.sort(
-    (a: Trip, b: Trip) =>
-      Date.parse(b.createdAt ?? '') - Date.parse(a.createdAt ?? '')
-  );
+  trips.sort((a: Trip, b: Trip) => created(b) - created(a));
 
   return { trips, toPush, toDelete };
 }
