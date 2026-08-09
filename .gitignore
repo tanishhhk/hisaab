@@ -21,3 +21,7 @@ dist/
 /*.png
 /*.jpg
 .playwright-mcp/
+
+# Scratch workspace for plan execution: ledgers, briefs, review packages.
+# The git history is the real record once a plan is done.
+.superpowers/

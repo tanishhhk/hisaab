@@ -3,6 +3,9 @@ import Landing from './Landing';
 import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
+import { newId, migrateLegacyIds, tripsKey } from './sync/ids';
+import { useSync } from './sync/useSync';
+import SyncStatus from './SyncStatus';
 
 // TypeScript Interfaces
 export interface Member {
@@ -40,6 +43,14 @@ export interface Trip {
   name: string;
   members: Member[];
   expenses: Expense[];
+  // Sort key for the trip list. Stable under edits, which is why the list is
+  // ordered by this and not by updatedAt.
+  createdAt?: string;
+  // Last-write-wins stamp, and always the value the server returned rather
+  // than a client guess: the trips_touch trigger rewrites updated_at on every
+  // update, so a guess would make the remote copy look permanently newer and
+  // re-pull on every load. Absent means this trip has never synced.
+  updatedAt?: string;
 }
 
 interface NewTripModalProps {
@@ -89,10 +100,6 @@ interface SummaryPanelProps {
 
 // Data model (saved to localStorage):
 // trips: [{ id, name, members: [{id,name}], expenses: [{id, title, payerId, total, splits: [{memberId, amount}], category, date}] }]
-
-function uid(prefix: string = ''): string {
-  return prefix + Math.random().toString(36).slice(2, 9);
-}
 
 // Display formatting only. Groups digits the Indian way (₹1,69,500.00), which
 // is what these amounts are read in. Never parse this back into a number,
@@ -319,7 +326,7 @@ export function validateExpense(d: ExpenseDraft): { errors: ExpenseErrors; split
 // on real numbers instead of staring at an empty screen. Built through
 // allocateEqually so the sample obeys the same rules as anything they enter.
 export function sampleTrip(): Trip {
-  const m = (name: string): Member => ({ id: uid('m_'), name });
+  const m = (name: string): Member => ({ id: newId(), name });
   const [asha, bilal, chetan, divya] = [m('Asha'), m('Bilal'), m('Chetan'), m('Divya')];
   const members = [asha, bilal, chetan, divya];
   const all = members.map((x: Member) => x.id);
@@ -329,10 +336,11 @@ export function sampleTrip(): Trip {
   const expense = (
     title: string, payer: Member, total: number,
     splits: Split[], category: string, offset: number
-  ): Expense => ({ id: uid('e_'), title, payerId: payer.id, total, splits, category, date: day(offset) });
+  ): Expense => ({ id: newId(), title, payerId: payer.id, total, splits, category, date: day(offset) });
 
   return {
-    id: uid('t_'),
+    id: newId(),
+    createdAt: new Date().toISOString(),
     name: 'Indore Weekend (sample)',
     members,
     expenses: [
@@ -407,14 +415,25 @@ function EmptyState({ onCreate, onSample }: { onCreate: () => void; onSample: ()
 }
 
 function useLocalState<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [state, setState] = useState<T>(() => {
+  const read = (k: string): T => {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(k);
       return raw ? JSON.parse(raw) : initial;
     } catch (e) {
       return initial;
     }
-  });
+  };
+  const [state, setState] = useState<T>(() => read(key));
+  // The key changes when someone signs in or out, and the state has to follow
+  // it. Without this, a sign-in would write the anonymous trips into the
+  // account's key on the next render.
+  const previousKey = React.useRef(key);
+  useEffect(() => {
+    if (previousKey.current === key) return;
+    previousKey.current = key;
+    setState(read(key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   useEffect(() => {
     localStorage.setItem(key, JSON.stringify(state));
   }, [key, state]);
@@ -494,7 +513,7 @@ function NewTripModal({ onClose, onCreate }: NewTripModalProps) {
 
   const create = () => {
     if (!name.trim()) return setError('Give the trip a name.');
-    onCreate({ id: uid('t_'), name: name.trim(), members: [], expenses: [] });
+    onCreate({ id: newId(), name: name.trim(), members: [], expenses: [], createdAt: new Date().toISOString() });
     onClose();
   };
 
@@ -641,7 +660,7 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
           className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
           onClick={() => { 
             if (!name.trim()) return; 
-            addMember({ id: uid('m_'), name: name.trim() }); 
+            addMember({ id: newId(), name: name.trim() });
             setName(''); 
           }}
         >
@@ -723,7 +742,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
     if (Object.keys(found).length > 0) return;
 
     onAdd({
-      id: uid('e_'),
+      id: newId(),
       title: title.trim(),
       // The first payer stays in payerId so anything reading the old field
       // still sees a real person rather than an empty string.
@@ -1119,8 +1138,91 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
   );
 }
 
+// Matches TripCard's geometry so the list does not jump when real data lands.
+function TripCardSkeleton() {
+  return (
+    <div data-testid="trip-skeleton" aria-hidden className="rounded-2xl border border-rule bg-surface p-5">
+      <div className="flex justify-between items-start">
+        <div className="space-y-2">
+          <div className="h-5 w-32 animate-pulse rounded bg-sunken" />
+          <div className="h-4 w-40 animate-pulse rounded bg-sunken" />
+        </div>
+        <div className="space-y-2 text-right">
+          <div className="ml-auto h-4 w-10 animate-pulse rounded bg-sunken" />
+          <div className="ml-auto h-5 w-20 animate-pulse rounded bg-sunken" />
+        </div>
+      </div>
+      <div className="mt-4 h-11 animate-pulse rounded-full bg-sunken" />
+    </div>
+  );
+}
+
+// A failed pull must never render as "you have no trips". Saying so would
+// invite a duplicate that then syncs and pollutes the account.
+function LoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-2xl border border-rule bg-surface p-8 text-center">
+      <h2 className="font-display text-xl tracking-tight">Couldn't load your trips</h2>
+      <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
+        Anything saved in this browser is still here and still safe. This is only about
+        reaching your account.
+      </p>
+      <button
+        onClick={onRetry}
+        className="mt-4 inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+// Shown once, and only after the pull has settled: offering to upload trips
+// before we know what is already up there risks duplicating them.
+function AdoptPrompt({ count, onAdopt, onDismiss }: {
+  count: number;
+  onAdopt: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 id="adopt-title" className="font-display text-xl tracking-tight">
+          Bring your {count} trip{count === 1 ? '' : 's'} into this account?
+        </h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          {count === 1 ? 'It was' : 'They were'} saved in this browser before you signed in.
+          Adding {count === 1 ? 'it' : 'them'} means {count === 1 ? 'it follows' : 'they follow'} you
+          to your other devices. Saying no leaves {count === 1 ? 'it' : 'them'} here, untouched.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onDismiss}
+          className="rounded-full border border-rule-strong px-4 py-2 text-sm font-medium transition-colors hover:bg-sunken"
+        >
+          Leave them here
+        </button>
+        <button
+          onClick={onAdopt}
+          className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+        >
+          Bring them in
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function TripExpenseApp() {
-  const [trips, setTrips] = useLocalState<Trip[]>('trips_v1', []);
+  const { user } = useSession();
+  const [trips, setTrips] = useLocalState<Trip[]>(tripsKey(user?.id ?? null), []);
+  // Trips saved before uuids existed cannot be written to Postgres, and the
+  // rewrite has to happen before anything is pushed. Idempotent, so running
+  // it on every mount costs one array scan once the work is done.
+  useEffect(() => {
+    setTrips((prev: Trip[]) => migrateLegacyIds(prev));
+  }, [setTrips]);
   const [showNew, setShowNew] = useState<boolean>(false);
   const [openTripId, setOpenTripId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Member | null>(null);
@@ -1133,16 +1235,33 @@ export default function TripExpenseApp() {
   // Phones only. On a wide screen every panel is visible at once, so the tabs
   // are hidden and the classes below fall back to lg:block.
   const [tab, setTab] = useState<'people' | 'expenses' | 'settle'>('expenses');
-  const { user } = useSession();
   const [signInReason, setSignInReason] = useState<string | null>(null);
+  // Only offered once per account, so a decline stays declined.
+  const [adoptAsked, setAdoptAsked] = useLocalState<Record<string, boolean>>('hisaab_adopt_asked', {});
+  const [orphans, setOrphans] = useState<Trip[] | null>(null);
 
-  const createTrip = (t: Trip) => setTrips((prev: Trip[]) => [t, ...prev]);
-  const deleteTrip = (id: string) => setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
+  const sync = useSync(user?.id ?? null, trips, setTrips);
+
+  // Every mutation stamps the trip and marks it dirty. The push itself is a
+  // background consequence, never a step the user waits on.
+  const stampNow = (t: Trip): Trip => ({ ...t, updatedAt: new Date().toISOString() });
+
+  const createTrip = (t: Trip) => {
+    setTrips((prev: Trip[]) => [stampNow(t), ...prev]);
+    sync.markDirty(t.id);
+  };
+  const deleteTrip = (id: string) => {
+    setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
+    sync.markDeleted(id);
+  };
 
   const openTrip = (id: string) => setOpenTripId(id);
   const closeTrip = () => setOpenTripId(null);
 
-  const updateTrip = (updated: Trip) => setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? updated : t));
+  const updateTrip = (updated: Trip) => {
+    setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? stampNow(updated) : t));
+    sync.markDirty(updated.id);
+  };
 
   const current = trips.find((t: Trip) => t.id === openTripId);
   const activeMembers = current ? current.members.filter(isActive) : [];
@@ -1156,8 +1275,45 @@ export default function TripExpenseApp() {
   // settlement output, not to leave another empty trip on the list.
   const loadSample = () => {
     const t = sampleTrip();
-    setTrips((prev: Trip[]) => [t, ...prev]);
+    setTrips((prev: Trip[]) => [stampNow(t), ...prev]);
+    sync.markDirty(t.id);
     setOpenTripId(t.id);
+  };
+
+  // Offer to adopt anonymous trips, but only once the pull has settled — the
+  // anonymous store is never modified, so declining costs nothing.
+  useEffect(() => {
+    const me = user?.id;
+    if (!me || !sync.hydrated || sync.pullFailed) return;
+    if (adoptAsked[me]) return;
+    try {
+      const raw = localStorage.getItem(tripsKey(null));
+      const local: Trip[] = raw ? JSON.parse(raw) : [];
+      if (local.length > 0) setOrphans(local);
+      else setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    } catch (e) {
+      setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    }
+  }, [user?.id, sync.hydrated, sync.pullFailed, adoptAsked, setAdoptAsked]);
+
+  const adoptOrphans = () => {
+    const me = user?.id;
+    if (!orphans || !me) return;
+    // Ids are already uuids and unique, so this is a plain union. The
+    // anonymous store is left exactly as it was: nothing is deleted, so
+    // signing out reveals it again intact.
+    const mine = new Set(trips.map((t: Trip) => t.id));
+    const incoming = migrateLegacyIds(orphans).filter((t: Trip) => !mine.has(t.id));
+    setTrips((prev: Trip[]) => [...incoming, ...prev]);
+    incoming.forEach((t: Trip) => sync.markDirty(t.id));
+    setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    setOrphans(null);
+  };
+
+  const declineOrphans = () => {
+    const me = user?.id;
+    if (me) setAdoptAsked((prev) => ({ ...prev, [me]: true }));
+    setOrphans(null);
   };
 
   // Wiping every trip is unrecoverable, so name what is about to be lost.
@@ -1168,7 +1324,9 @@ export default function TripExpenseApp() {
       `Delete all ${n} trip${n === 1 ? '' : 's'} and ${expenseCount} expense${expenseCount === 1 ? '' : 's'}?\n\n` +
       'This cannot be undone. Export to CSV first if you want a copy.'
     );
-    if (ok) setTrips([]);
+    if (!ok) return;
+    trips.forEach((t: Trip) => sync.markDeleted(t.id));
+    setTrips([]);
   };
 
   if (!seenLanding) {
@@ -1210,9 +1368,11 @@ export default function TripExpenseApp() {
                 Hisaab
               </button>
             </h1>
-            <p className="text-sm text-ink-subtle mt-1">
-              Saved in this browser only. It will not follow you to another device.
-            </p>
+            <SyncStatus
+              phase={sync.phase}
+              onRetry={sync.retry}
+              onSignIn={() => setSignInReason('Sign in again to keep syncing.')}
+            />
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
@@ -1253,7 +1413,29 @@ export default function TripExpenseApp() {
           </div>
         </header>
 
-        {!current && trips.length === 0 && (
+        {!current && trips.length === 0 && sync.skeleton && (
+          <main>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <TripCardSkeleton />
+              <TripCardSkeleton />
+              <TripCardSkeleton />
+            </div>
+          </main>
+        )}
+
+        {!current && trips.length === 0 && !sync.skeleton && sync.hydrated && sync.pullFailed && (
+          <main>
+            <LoadFailed onRetry={sync.retry} />
+          </main>
+        )}
+
+        {/* hydrated is required, not implied by the two flags above. For the
+            first 200ms of a pull the skeleton is deliberately suppressed, and
+            without this guard that window would render EmptyState — telling
+            someone with cloud trips that they have none, which invites a
+            duplicate. Rendering nothing briefly is the honest answer when the
+            answer is not yet known. */}
+        {!current && trips.length === 0 && !sync.skeleton && !sync.pullFailed && sync.hydrated && (
           <main>
             <EmptyState onCreate={() => setShowNew(true)} onSample={loadSample} />
           </main>
@@ -1494,6 +1676,11 @@ export default function TripExpenseApp() {
             onClose={() => setSignInReason(null)}
             onSignedIn={() => setSignInReason(null)}
           />
+        </Modal>
+      )}
+      {orphans && orphans.length > 0 && (
+        <Modal onClose={declineOrphans} labelledBy="adopt-title" width="max-w-md">
+          <AdoptPrompt count={orphans.length} onAdopt={adoptOrphans} onDismiss={declineOrphans} />
         </Modal>
       )}
       {current && pendingRemoval && (
