@@ -1,5 +1,15 @@
 import { tripToPayload, remoteToTrip, RemoteTrip, TripPayload } from './rows';
-import { sampleTrip, Trip, Split } from '../App';
+import { sampleTrip, Trip, Split, Member, Expense } from '../App';
+
+// Every member and expense now comes back with its own server stamp, so the
+// round trip is only an identity once the source carries them too. Applied in
+// one place rather than sprinkled through every fixture.
+const ENTITY_STAMP = '2026-02-01T00:00:00.000Z';
+const stamped = (t: Trip): Trip => ({
+  ...t,
+  members: t.members.map((m: Member) => ({ ...m, updatedAt: ENTITY_STAMP })),
+  expenses: t.expenses.map((e: Expense) => ({ ...e, updatedAt: ENTITY_STAMP })),
+});
 
 // Stands in for what Postgres gives back: the payload plus the server's
 // updated_at, with embedded arrays deliberately shuffled, because PostgREST
@@ -9,7 +19,7 @@ const asRemote = (p: TripPayload, updatedAt = '2026-02-01T00:00:00.000Z'): Remot
   name: p.name,
   created_at: p.created_at,
   updated_at: updatedAt,
-  members: [...p.members].reverse(),
+  members: [...p.members].reverse().map((m) => ({ ...m, updated_at: ENTITY_STAMP })),
   expenses: [...p.expenses].reverse().map((e) => ({
     id: e.id,
     title: e.title,
@@ -20,10 +30,14 @@ const asRemote = (p: TripPayload, updatedAt = '2026-02-01T00:00:00.000Z'): Remot
     position: e.position,
     splits: [...e.splits].reverse(),
     payments: e.payments ? [...e.payments].reverse() : [],
+    updated_at: ENTITY_STAMP,
   })),
 });
 
 const roundTrip = (t: Trip): Trip => remoteToTrip(asRemote(tripToPayload(t), t.updatedAt));
+
+// Compare against the stamped source, since the server always supplies stamps.
+const survives = (t: Trip) => expect(roundTrip(t)).toEqual(stamped(t));
 
 const base = (over: Partial<Trip> = {}): Trip => ({
   id: '11111111-1111-4111-8111-111111111111',
@@ -41,12 +55,12 @@ const base = (over: Partial<Trip> = {}): Trip => ({
 describe('tripToPayload / remoteToTrip round trip', () => {
   it('survives the sample trip', () => {
     const t = { ...sampleTrip(), updatedAt: '2026-02-01T00:00:00.000Z' };
-    expect(roundTrip(t)).toEqual(t);
+    survives(t);
   });
 
   it('survives an empty trip', () => {
     const t = base();
-    expect(roundTrip(t)).toEqual(t);
+    survives(t);
   });
 
   it('survives a multi-payer expense', () => {
@@ -70,7 +84,7 @@ describe('tripToPayload / remoteToTrip round trip', () => {
         },
       ],
     });
-    expect(roundTrip(t)).toEqual(t);
+    survives(t);
   });
 
   it('keeps a single-payer expense free of a payers key', () => {
@@ -89,7 +103,7 @@ describe('tripToPayload / remoteToTrip round trip', () => {
     });
     const out = roundTrip(t);
     expect('payers' in out.expenses[0]).toBe(false);
-    expect(out).toEqual(t);
+    survives(t);
   });
 
   it('survives a retired member who still has money attached', () => {
@@ -113,7 +127,7 @@ describe('tripToPayload / remoteToTrip round trip', () => {
         },
       ],
     });
-    expect(roundTrip(t)).toEqual(t);
+    survives(t);
   });
 
   it('canonicalises split order rather than preserving it, and is stable on a second pass', () => {

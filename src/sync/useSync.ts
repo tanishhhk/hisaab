@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Trip } from '../App';
+import { Trip, Member, Expense } from '../App';
 import { isBackendConfigured } from '../supabase';
 import { syncKey } from './ids';
 import { reconcile, SyncState } from './reconcile';
-import { pullTrips, pushTrip, deleteTrip } from './remote';
+import {
+  pullTrips,
+  pushTripMeta,
+  pushMember,
+  pushExpense,
+  removeMember,
+  removeExpense,
+  deleteTrip,
+  Result,
+} from './remote';
 
 export type SyncPhase = 'local' | 'saving' | 'synced' | 'offline' | 'error' | 'auth';
 
@@ -47,6 +56,57 @@ const writeState = (userId: string, s: SyncState): void => {
     /* storage blocked or full; the in-memory copy still drives this session */
   }
 };
+
+
+type Kind = 'trip' | 'member' | 'expense';
+
+const splitKey = (key: string): [Kind, string] => {
+  const i = key.indexOf(':');
+  return [key.slice(0, i) as Kind, key.slice(i + 1)];
+};
+
+// A trip must exist before anything can hang off it, so its own key goes
+// first in every flush.
+const tripsFirst = (a: string, b: string): number =>
+  Number(b.startsWith('trip:')) - Number(a.startsWith('trip:'));
+
+// Where an entity lives, and at what index, because position is part of what
+// gets written and the server has no other way to learn the order.
+function locate(
+  trips: Trip[],
+  kind: Kind,
+  id: string
+): { trip: Trip; entity: Trip | Member | Expense; index: number } | null {
+  if (kind === 'trip') {
+    const t = trips.find((x: Trip) => x.id === id);
+    return t ? { trip: t, entity: t, index: 0 } : null;
+  }
+  for (const t of trips) {
+    const list: (Member | Expense)[] = kind === 'member' ? t.members : t.expenses;
+    const i = list.findIndex((x) => x.id === id);
+    if (i >= 0) return { trip: t, entity: list[i], index: i };
+  }
+  return null;
+}
+
+function stampEntity(
+  setTrips: React.Dispatch<React.SetStateAction<Trip[]>>,
+  tripId: string,
+  kind: Kind,
+  id: string,
+  stamp: string
+): void {
+  setTrips((prev: Trip[]) =>
+    prev.map((t: Trip) => {
+      if (t.id !== tripId) return t;
+      if (kind === 'trip') return { ...t, updatedAt: stamp };
+      if (kind === 'member') {
+        return { ...t, members: t.members.map((m) => (m.id === id ? { ...m, updatedAt: stamp } : m)) };
+      }
+      return { ...t, expenses: t.expenses.map((e) => (e.id === id ? { ...e, updatedAt: stamp } : e)) };
+    })
+  );
+}
 
 export function useSync(
   userId: string | null,
@@ -106,10 +166,14 @@ export function useSync(
 
     let failure: 'network' | 'auth' | 'db' | null = null;
 
-    for (const id of [...deleted]) {
-      const r = await deleteTrip(id);
+    for (const key of [...deleted]) {
+      const [kind, id] = splitKey(key);
+      const r =
+        kind === 'trip' ? await deleteTrip(id)
+        : kind === 'member' ? await removeMember(id)
+        : await removeExpense(id);
       if (r.ok) {
-        stateRef.current.deleted = stateRef.current.deleted.filter((x: string) => x !== id);
+        stateRef.current.deleted = stateRef.current.deleted.filter((x: string) => x !== key);
       } else {
         failure = r.kind;
         break;
@@ -117,20 +181,31 @@ export function useSync(
     }
 
     if (!failure) {
-      for (const id of [...dirty]) {
-        const trip = tripsRef.current.find((t: Trip) => t.id === id);
-        if (!trip) {
-          stateRef.current.dirty = stateRef.current.dirty.filter((x: string) => x !== id);
+      // Trips first. A member or expense pushed before its trip exists would
+      // fail the foreign key, and the retry would look like a server fault.
+      for (const key of [...dirty].sort(tripsFirst)) {
+        const [kind, id] = splitKey(key);
+        const found = locate(tripsRef.current, kind, id);
+        if (!found) {
+          // Created and deleted before it ever reached the server.
+          stateRef.current.dirty = stateRef.current.dirty.filter((x: string) => x !== key);
           continue;
         }
-        const r = await pushTrip(trip);
+
+        let r: Result<string>;
+        if (kind === 'trip') {
+          r = await pushTripMeta(found.trip.id, found.trip.name, found.trip.createdAt);
+        } else if (kind === 'member') {
+          r = await pushMember(found.trip.id, found.entity as Member, found.index);
+        } else {
+          r = await pushExpense(found.trip.id, found.entity as Expense, found.index, found.trip.members);
+        }
+
         if (r.ok) {
-          // Take the server's stamp. A local guess would lose to the
-          // trips_touch trigger and re-pull forever.
-          setTrips((prev: Trip[]) =>
-            prev.map((t: Trip) => (t.id === id ? { ...t, updatedAt: r.value } : t))
-          );
-          stateRef.current.dirty = stateRef.current.dirty.filter((x: string) => x !== id);
+          // Take the server's stamp for the row that was written. A local
+          // guess would lose to the touch trigger and re-pull forever.
+          stampEntity(setTrips, found.trip.id, kind, id, r.value);
+          stateRef.current.dirty = stateRef.current.dirty.filter((x: string) => x !== key);
         } else {
           failure = r.kind;
           break;

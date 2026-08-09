@@ -53,8 +53,13 @@ export interface RemoteTrip {
   name: string;
   created_at: string;
   updated_at: string;
-  members: MemberPayload[];
-  expenses: (Omit<ExpensePayload, 'payments'> & { payments: AmountRow[] })[];
+  // Members and expenses now merge independently, so each arrives with its
+  // own stamp rather than borrowing the trip's.
+  members: (MemberPayload & { updated_at: string })[];
+  expenses: (Omit<ExpensePayload, 'payments'> & {
+    payments: AmountRow[];
+    updated_at: string;
+  })[];
 }
 
 // numeric(12,2) can arrive as a JSON number or a string depending on the
@@ -64,50 +69,57 @@ const num = (v: number | string): number => Number(v);
 
 const byPosition = <T extends { position: number }>(a: T, b: T): number => a.position - b.position;
 
-export function tripToPayload(trip: Trip): TripPayload {
-  // Postgres treats splits and payments as a set keyed by (expense_id,
-  // member_id) — see the AmountRow comment — so the server does not care what
-  // order this function emits them in. The sort below exists anyway: it keeps
-  // the payload a deterministic function of trip *content*, not of whatever
-  // order the local array happened to be built in. Without it, two trips with
-  // identical members and amounts but differently-ordered splits arrays would
-  // produce different (non-byte-equal) payloads, which breaks anything that
-  // diffs payloads to decide whether a push is needed.
-  const memberPosition = new Map<string, number>(trip.members.map((m: Member, i: number) => [m.id, i]));
-  const byMemberPosition = (a: { memberId: string }, b: { memberId: string }): number =>
-    (memberPosition.get(a.memberId) ?? 0) - (memberPosition.get(b.memberId) ?? 0);
+// Order splits and payments by where their member sits in the roster. Not by
+// member_id, which is a random uuid carrying no order at all.
+function memberOrder(members: Member[]) {
+  const pos = new Map<string, number>(members.map((m: Member, i: number) => [m.id, i]));
+  return (a: { memberId: string }, b: { memberId: string }): number =>
+    (pos.get(a.memberId) ?? 0) - (pos.get(b.memberId) ?? 0);
+}
 
+export function memberPayload(m: Member, index: number): MemberPayload {
+  return {
+    id: m.id,
+    name: m.name,
+    // Absent means active, per isActive(). The column is NOT NULL, so the
+    // default has to be resolved here rather than in SQL.
+    active: m.active !== false,
+    position: index,
+  };
+}
+
+export function expensePayload(e: Expense, index: number, members: Member[]): ExpensePayload {
+  const order = memberOrder(members);
+  return {
+    id: e.id,
+    title: e.title,
+    payer_id: e.payerId,
+    total: Number(e.total),
+    category: e.category,
+    spent_at: e.date,
+    position: index,
+    splits: [...e.splits].sort(order).map((s: Split) => ({ member_id: s.memberId, amount: Number(s.amount) })),
+    payments: e.payers
+      ? [...e.payers].sort(order).map((p: Split) => ({ member_id: p.memberId, amount: Number(p.amount) }))
+      : null,
+  };
+}
+
+export function tripToPayload(trip: Trip): TripPayload {
+  // Composed from the per-entity builders so a whole-trip payload and a
+  // single-entity push can never drift apart in shape.
   return {
     id: trip.id,
     name: trip.name,
     created_at: trip.createdAt ?? new Date().toISOString(),
-    members: trip.members.map((m: Member, i: number) => ({
-      id: m.id,
-      name: m.name,
-      // Absent means active, per isActive(). The column is NOT NULL, so the
-      // default has to be resolved here rather than in SQL.
-      active: m.active !== false,
-      position: i,
-    })),
-    expenses: trip.expenses.map((e: Expense, i: number) => ({
-      id: e.id,
-      title: e.title,
-      payer_id: e.payerId,
-      total: Number(e.total),
-      category: e.category,
-      spent_at: e.date,
-      position: i,
-      splits: [...e.splits].sort(byMemberPosition).map((s: Split) => ({ member_id: s.memberId, amount: Number(s.amount) })),
-      payments: e.payers
-        ? [...e.payers].sort(byMemberPosition).map((p: Split) => ({ member_id: p.memberId, amount: Number(p.amount) }))
-        : null,
-    })),
+    members: trip.members.map(memberPayload),
+    expenses: trip.expenses.map((e: Expense, i: number) => expensePayload(e, i, trip.members)),
   };
 }
 
 export function remoteToTrip(row: RemoteTrip): Trip {
-  const members: Member[] = [...row.members].sort(byPosition).map((m: MemberPayload) => {
-    const out: Member = { id: m.id, name: m.name };
+  const members: Member[] = [...row.members].sort(byPosition).map((m) => {
+    const out: Member = { id: m.id, name: m.name, updatedAt: m.updated_at };
     // Only write `active` when it is false, so a round trip reproduces the
     // original object exactly rather than adding `active: true` everywhere.
     if (!m.active) out.active = false;
@@ -130,6 +142,7 @@ export function remoteToTrip(row: RemoteTrip): Trip {
       splits: [...e.splits].sort(byMemberPosition).map((s: AmountRow) => ({ memberId: s.member_id, amount: num(s.amount) })),
       category: e.category,
       date: e.spent_at,
+      updatedAt: e.updated_at,
     };
     if (e.payments && e.payments.length > 0) {
       out.payers = [...e.payments].sort(byMemberPosition).map((p: AmountRow) => ({ memberId: p.member_id, amount: num(p.amount) }));

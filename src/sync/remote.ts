@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { Trip } from '../App';
-import { tripToPayload, remoteToTrips, RemoteTrip } from './rows';
+import { memberPayload, expensePayload, remoteToTrips, RemoteTrip } from './rows';
+import { Member, Expense } from '../App';
 
 export type Failure = { ok: false; kind: 'network' | 'auth' | 'db'; message: string };
 export type Result<T> = { ok: true; value: T } | Failure;
@@ -33,14 +34,21 @@ const NO_BACKEND: Failure = {
 // by position rather than trusting what arrives.
 const SELECT =
   'id,name,created_at,updated_at,' +
-  'members(id,name,active,position),' +
-  'expenses(id,title,payer_id,total,category,spent_at,position,' +
+  'members(id,name,active,position,updated_at),' +
+  'expenses(id,title,payer_id,total,category,spent_at,position,updated_at,' +
   'splits(member_id,amount),payments(member_id,amount))';
 
 export async function pullTrips(): Promise<Result<Trip[]>> {
   if (!supabase) return NO_BACKEND;
   try {
-    const { data, error } = await supabase.from('trips').select(SELECT);
+    const { data, error } = await supabase
+      .from('trips')
+      .select(SELECT)
+      // Tombstoned rows are dropped here, not in the client. reconcile reads
+      // "local, clean, and absent from the server" as a deletion, so leaving
+      // them out of the response is what carries a delete between devices.
+      .is('members.deleted_at', null)
+      .is('expenses.deleted_at', null);
     if (error) return classify(error);
     return { ok: true, value: remoteToTrips((data ?? []) as unknown as RemoteTrip[]) };
   } catch (e) {
@@ -48,16 +56,50 @@ export async function pullTrips(): Promise<Result<Trip[]>> {
   }
 }
 
-export async function pushTrip(trip: Trip): Promise<Result<string>> {
+export async function pushTripMeta(
+  id: string,
+  name: string,
+  createdAt?: string
+): Promise<Result<string>> {
+  return rpcStamp('save_trip_meta', { trip_id: id, name, created_at: createdAt ?? null });
+}
+
+export async function pushMember(
+  tripId: string,
+  member: Member,
+  index: number
+): Promise<Result<string>> {
+  return rpcStamp('save_member', { trip_id: tripId, member: memberPayload(member, index) });
+}
+
+export async function pushExpense(
+  tripId: string,
+  expense: Expense,
+  index: number,
+  members: Member[]
+): Promise<Result<string>> {
+  return rpcStamp('save_expense', {
+    trip_id: tripId,
+    expense: expensePayload(expense, index, members),
+  });
+}
+
+export async function removeMember(id: string): Promise<Result<string>> {
+  return rpcStamp('delete_member', { member_id: id });
+}
+
+export async function removeExpense(id: string): Promise<Result<string>> {
+  return rpcStamp('delete_expense', { expense_id: id });
+}
+
+// Every write returns the server's stamp for the row it touched. Storing that
+// rather than a local guess is what stops the touch triggers making the remote
+// copy look permanently newer on the next pull.
+async function rpcStamp(fn: string, args: Record<string, unknown>): Promise<Result<string>> {
   if (!supabase) return NO_BACKEND;
   try {
-    const { data, error } = await supabase.rpc('save_trip', {
-      payload: tripToPayload(trip),
-    });
+    const { data, error } = await supabase.rpc(fn, args);
     if (error) return classify(error);
-    // save_trip returns the server's updated_at. Storing the server's value
-    // rather than a local guess is what stops the trips_touch trigger making
-    // the remote copy look permanently newer on the next load.
     return { ok: true, value: String(data) };
   } catch (e) {
     return classify(null, e);

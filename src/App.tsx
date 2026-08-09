@@ -7,6 +7,7 @@ import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
 import { newId, migrateLegacyIds, tripsKey } from './sync/ids';
 import { useRoute } from './routes';
+import { tripKey, memberKey, expenseKey } from './sync/reconcile';
 import { useSync } from './sync/useSync';
 import SyncStatus from './SyncStatus';
 
@@ -1643,21 +1644,54 @@ export default function TripExpenseApp() {
   // background consequence, never a step the user waits on.
   const stampNow = (t: Trip): Trip => ({ ...t, updatedAt: new Date().toISOString() });
 
+
+  // Which entities actually changed. updateTrip is the single funnel for every
+  // edit and does not know what the caller touched, so the change is derived
+  // by comparing object identity against the previous copy. That works because
+  // every mutation in this file is immutable: applyRemoval, adding an expense
+  // and editing one all rebuild the changed object and pass unchanged ones
+  // through by reference. Marking too much would be slow, marking too little
+  // would silently drop a write, and identity is what distinguishes them.
+  const markChanged = (before: Trip | undefined, after: Trip) => {
+    if (!before) {
+      sync.markDirty(tripKey(after.id));
+      after.members.forEach((m: Member) => sync.markDirty(memberKey(m.id)));
+      after.expenses.forEach((e: Expense) => sync.markDirty(expenseKey(e.id)));
+      return;
+    }
+    if (before.name !== after.name) sync.markDirty(tripKey(after.id));
+
+    const wasM = new Map(before.members.map((m: Member) => [m.id, m]));
+    after.members.forEach((m: Member) => {
+      if (wasM.get(m.id) !== m) sync.markDirty(memberKey(m.id));
+      wasM.delete(m.id);
+    });
+    wasM.forEach((m: Member) => sync.markDeleted(memberKey(m.id)));
+
+    const wasE = new Map(before.expenses.map((e: Expense) => [e.id, e]));
+    after.expenses.forEach((e: Expense) => {
+      if (wasE.get(e.id) !== e) sync.markDirty(expenseKey(e.id));
+      wasE.delete(e.id);
+    });
+    wasE.forEach((e: Expense) => sync.markDeleted(expenseKey(e.id)));
+  };
+
   const createTrip = (t: Trip) => {
     setTrips((prev: Trip[]) => [stampNow(t), ...prev]);
-    sync.markDirty(t.id);
+    markChanged(undefined, t);
   };
   const deleteTrip = (id: string) => {
     setTrips((prev: Trip[]) => prev.filter((t: Trip) => t.id !== id));
-    sync.markDeleted(id);
+    sync.markDeleted(tripKey(id));
   };
 
   const openTrip = (id: string) => navigate({ name: 'trip', id });
   const closeTrip = () => { navigate({ name: 'trips' }); setEditingExpenseId(null); };
 
   const updateTrip = (updated: Trip) => {
+    const before = trips.find((t: Trip) => t.id === updated.id);
     setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? stampNow(updated) : t));
-    sync.markDirty(updated.id);
+    markChanged(before, updated);
   };
 
   const current = trips.find((t: Trip) => t.id === openTripId);
@@ -1704,7 +1738,7 @@ export default function TripExpenseApp() {
     const mine = new Set(trips.map((t: Trip) => t.id));
     const incoming = migrateLegacyIds(orphans).filter((t: Trip) => !mine.has(t.id));
     setTrips((prev: Trip[]) => [...incoming, ...prev]);
-    incoming.forEach((t: Trip) => sync.markDirty(t.id));
+    incoming.forEach((t: Trip) => markChanged(undefined, t));
     setAdoptAsked((prev) => ({ ...prev, [me]: true }));
     setOrphans(null);
   };
@@ -1724,7 +1758,7 @@ export default function TripExpenseApp() {
       'This cannot be undone. Export to CSV first if you want a copy.'
     );
     if (!ok) return;
-    trips.forEach((t: Trip) => sync.markDeleted(t.id));
+    trips.forEach((t: Trip) => sync.markDeleted(tripKey(t.id)));
     setTrips([]);
   };
 
