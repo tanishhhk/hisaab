@@ -5,6 +5,7 @@ import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
 import { newId, migrateLegacyIds, tripsKey } from './sync/ids';
+import { useRoute } from './routes';
 import { useSync } from './sync/useSync';
 import SyncStatus from './SyncStatus';
 
@@ -1331,15 +1332,18 @@ export default function TripExpenseApp() {
   useEffect(() => {
     setTrips((prev: Trip[]) => migrateLegacyIds(prev));
   }, [setTrips]);
+  // The URL is the source of truth for which surface is showing, so back,
+  // forward, refresh and a shared link all land in the same place.
+  const [route, navigate] = useRoute();
+  const seenLanding = route.name !== 'landing';
+  const openTripId = route.name === 'trip' ? route.id : null;
+
   const [showNew, setShowNew] = useState<boolean>(false);
-  const [openTripId, setOpenTripId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Member | null>(null);
   // SheetJS arrives in a lazy 139 kB chunk. On a slow connection the button
   // would sit silent for seconds and get clicked repeatedly.
   const [exportState, setExportState] = useState<'idle' | 'working' | 'failed'>('idle');
-  // The landing page is the entry surface until someone actually starts.
-  const [seenLanding, setSeenLanding] = useLocalState<boolean>('hisaab_seen_landing', false);
   const [theme, toggleTheme] = useTheme();
   // Phones only. On a wide screen every panel is visible at once, so the tabs
   // are hidden and the classes below fall back to lg:block.
@@ -1373,8 +1377,8 @@ export default function TripExpenseApp() {
     sync.markDeleted(id);
   };
 
-  const openTrip = (id: string) => setOpenTripId(id);
-  const closeTrip = () => { setOpenTripId(null); setEditingExpenseId(null); };
+  const openTrip = (id: string) => navigate({ name: 'trip', id });
+  const closeTrip = () => { navigate({ name: 'trips' }); setEditingExpenseId(null); };
 
   const updateTrip = (updated: Trip) => {
     setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? stampNow(updated) : t));
@@ -1382,6 +1386,17 @@ export default function TripExpenseApp() {
   };
 
   const current = trips.find((t: Trip) => t.id === openTripId);
+
+  // A trip id in the URL that resolves to nothing: a deleted trip, or a link
+  // from someone else's account. Send them to the list rather than showing it
+  // while the address bar claims otherwise. Waits for the first pull, or a
+  // legitimate deep link would bounce before the cloud copy arrived, and
+  // replaces rather than pushes so Back does not land on the dead URL again.
+  useEffect(() => {
+    if (route.name !== 'trip' || !sync.hydrated) return;
+    if (trips.some((t: Trip) => t.id === route.id)) return;
+    navigate({ name: 'trips' }, true);
+  }, [route, trips, sync.hydrated, navigate]);
   const activeMembers = current ? current.members.filter(isActive) : [];
 
   const confirmRemoval = (mode: RemovalMode) => {
@@ -1454,7 +1469,7 @@ export default function TripExpenseApp() {
           onToggleTheme={toggleTheme}
           signedIn={!!user}
           onSignIn={isBackendConfigured ? () => setSignInReason('Keep your trips across devices.') : undefined}
-          onStart={() => { setSeenLanding(true); setShowLoader(true); }}
+          onStart={() => { navigate({ name: 'trips' }); setShowLoader(true); }}
         />
         {signInReason !== null && (
           <Modal onClose={() => setSignInReason(null)} labelledBy="signin-title" width="max-w-md">
@@ -1487,7 +1502,7 @@ export default function TripExpenseApp() {
               <h1 className="font-display text-[1.35rem] font-semibold tracking-tighter text-ink">
                 <button
                   type="button"
-                  onClick={() => setSeenLanding(false)}
+                  onClick={() => navigate({ name: 'landing' })}
                   title="Back to the Hisaab home page"
                   className="rounded-full transition-opacity hover:opacity-70 text-inherit"
                 >
@@ -1565,7 +1580,7 @@ export default function TripExpenseApp() {
           <main>
             <EmptyState 
               onCreate={() => setShowNew(true)} 
-              onReadGuide={() => setSeenLanding(false)}
+              onReadGuide={() => navigate({ name: 'landing' })}
             />
           </main>
         )}

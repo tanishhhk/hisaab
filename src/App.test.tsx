@@ -354,8 +354,14 @@ describe('sampleTrip', () => {
   });
 });
 
+// Which surface renders is decided by the URL now, not a stored flag.
+const at = (path: string) => window.history.replaceState({}, '', path);
+
 describe('App', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    at('/');
+  });
 
   it('shows the landing page to a first-time visitor', () => {
     render(<App />);
@@ -365,14 +371,14 @@ describe('App', () => {
   });
 
   it('shows the app itself once the landing page has been passed', () => {
-    localStorage.setItem('hisaab_seen_landing', 'true');
+    at('/app');
     render(<App />);
     expect(screen.getByRole('heading', { name: 'Hisaab' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create your first trip/i })).toBeInTheDocument();
   });
 
   it('migrates legacy ids in stored trips on load', () => {
-    localStorage.setItem('hisaab_seen_landing', 'true');
+    at('/app');
     localStorage.setItem(
       'trips_v1',
       JSON.stringify([
@@ -394,7 +400,7 @@ describe('App', () => {
   });
 
   it('keeps the anonymous store separate from an account store', () => {
-    localStorage.setItem('hisaab_seen_landing', 'true');
+    at('/app');
     localStorage.setItem('trips_v1', JSON.stringify([
       { id: '11111111-1111-4111-8111-111111111111', name: 'Guest trip', members: [], expenses: [], createdAt: '2026-01-01T00:00:00.000Z' },
     ]));
