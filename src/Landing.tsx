@@ -841,9 +841,13 @@ export default function Landing({ onStart, onSample, onSignIn, signedIn, theme, 
             above it instead of being squeezed to nothing on either side. */}
         <div className="mt-20 border-t border-rule pt-9 sm:flex sm:items-center sm:gap-8 sm:border-0 sm:pt-0">
           <span aria-hidden className="hidden h-px flex-1 bg-rule sm:block" />
+          {/* The nod is in "split it wisely", which carries both halves of the
+              name. Left unitalicised on purpose: the reader who catches it
+              catches it, and pointing at your own joke kills it. The second
+              clause has to land on the actual difference, which is exactness,
+              because the six proofs underneath are the evidence for it. */}
           <p className="text-center font-display text-[clamp(1.15rem,2.1vw,1.4rem)] leading-[1.35] tracking-tight">
-            Plenty of apps put <span className="italic">wise</span> in the name.
-            We would rather put it in the arithmetic.
+            Plenty of apps split it wisely. We would rather split it exactly.
           </p>
           <span aria-hidden className="hidden h-px flex-1 bg-rule sm:block" />
         </div>
