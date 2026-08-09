@@ -173,11 +173,15 @@ begin
 
   -- Children first, for the same on delete restrict reason as above. The
   -- trips cascade would handle members and expenses, but not the restrict
-  -- edges between them.
-  delete from public.payments where trip_id = tid;
-  delete from public.splits   where trip_id = tid;
-  delete from public.expenses where trip_id = tid;
-  delete from public.members  where trip_id = tid;
+  -- edges between them. The left side of each comparison is schema- and
+  -- table-qualified, not bare trip_id: the tid local above does not remove
+  -- the trip_id parameter from scope, so a bare trip_id here would still be
+  -- ambiguous between the parameter and the column on every one of these
+  -- tables.
+  delete from public.payments where public.payments.trip_id = tid;
+  delete from public.splits   where public.splits.trip_id   = tid;
+  delete from public.expenses where public.expenses.trip_id = tid;
+  delete from public.members  where public.members.trip_id  = tid;
   delete from public.trips    where id = tid;
 end;
 $$;
