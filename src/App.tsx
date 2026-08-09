@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import Landing from './Landing';
+import Landing, { LoadingScreen } from './Landing';
+import { AnimatePresence } from 'framer-motion';
 import ThemeToggle, { useTheme } from './ThemeToggle';
 import SignIn, { useSession, signOut } from './SignIn';
 import { isBackendConfigured } from './supabase';
@@ -82,16 +83,22 @@ interface RemoveMemberModalProps {
 interface ExpenseFormProps {
   members: Member[];
   onAdd: (expense: Expense) => void;
+  editingExpense?: Expense | null;
+  onUpdate?: (expense: Expense) => void;
+  onCancel?: () => void;
+  existingCategories?: string[];
 }
 
 interface ExpenseListProps {
   expenses: Expense[];
   members: Member[];
   onDelete: (id: string) => void;
+  onEdit: (expense: Expense) => void;
 }
 
 interface SummaryPanelProps {
   trip: Trip;
+  onSettle?: (settlements: {fromId: string, toId: string, amount: number}[]) => void;
 }
 
 // TripExpenseApp.tsx
@@ -353,9 +360,9 @@ export function sampleTrip(): Trip {
   };
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({ onCreate, onReadGuide }: { onCreate: () => void; onReadGuide: () => void }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-rule bg-surface">
+    <section className="overflow-hidden rounded-3xl border border-rule bg-surface">
       <div className="grid gap-8 p-8 sm:p-12 lg:grid-cols-2 lg:items-center">
         <div>
           <h2 className="font-display text-4xl leading-[1.05] tracking-tight text-ink sm:text-5xl">
@@ -365,12 +372,18 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
             Add everyone who came, log what each person paid, and get the shortest
             list of transfers that squares the whole group up.
           </p>
-          <div className="mt-7">
+          <div className="mt-7 flex flex-wrap items-center gap-3">
             <button
-              className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 font-medium text-canvas transition-colors hover:bg-ink/88"
+              className="inline-flex min-h-[3rem] items-center justify-center rounded-full bg-ink px-6 py-2.5 font-medium text-canvas transition-colors hover:bg-ink/88"
               onClick={onCreate}
             >
               Create your first trip
+            </button>
+            <button
+              className="inline-flex min-h-[3rem] items-center justify-center rounded-full border border-rule-strong px-6 py-2.5 font-medium text-ink transition-colors hover:bg-sunken"
+              onClick={onReadGuide}
+            >
+              Back to start
             </button>
           </div>
         </div>
@@ -619,20 +632,22 @@ function RemoveMemberModal({ member, trip, onClose, onConfirm }: RemoveMemberMod
 function TripCard({ trip, onOpen, onDelete }: TripCardProps) {
   const total = trip.expenses.reduce((s: number, e: Expense) => s + Number(e.total), 0);
   return (
-    <div className="rounded-2xl border border-rule bg-surface p-5 transition-colors hover:border-rule-strong">
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="font-display text-lg tracking-tight">{trip.name}</h3>
-          <div className="text-sm text-ink-muted">Members: {trip.members.filter(isActive).length} • Expenses: {trip.expenses.length}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-ink-muted">Total</div>
-          <div className="font-bold tnum">₹{currency(total)}</div>
+    <div className="rounded-3xl border border-rule bg-surface p-6 sm:p-8 transition-all hover:border-rule-strong hover:shadow-sm flex flex-col justify-between group">
+      <div>
+        <div className="flex justify-between items-start gap-4">
+          <div>
+            <h3 className="font-display text-2xl tracking-tight text-ink group-hover:text-accent transition-colors">{trip.name}</h3>
+            <div className="mt-1 text-sm text-ink-muted">Members: {trip.members.filter(isActive).length} • Expenses: {trip.expenses.length}</div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-sm font-medium uppercase tracking-wider text-ink-subtle mb-0.5">Total</div>
+            <div className="font-mono text-xl font-medium tnum text-ink">₹{currency(total)}</div>
+          </div>
         </div>
       </div>
-      <div className="mt-4 flex gap-2">
-        <button className="flex-1 inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={() => onOpen(trip.id)}>Open</button>
-        <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" onClick={() => onDelete(trip.id)}>Delete</button>
+      <div className="mt-8 flex gap-3">
+        <button className="flex-1 inline-flex min-h-[3rem] items-center justify-center rounded-full bg-ink px-5 py-2.5 text-[0.95rem] font-medium text-canvas transition-colors hover:bg-ink/88" onClick={() => onOpen(trip.id)}>Open</button>
+        <button className="inline-flex min-h-[3rem] items-center justify-center rounded-full border border-rule-strong px-5 py-2.5 text-[0.95rem] font-medium text-ink transition-colors hover:bg-sunken" onClick={() => onDelete(trip.id)}>Delete</button>
       </div>
     </div>
   );
@@ -647,6 +662,14 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
         <input 
           value={name} 
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} 
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (!name.trim()) return; 
+              addMember({ id: newId(), name: name.trim() });
+              setName(''); 
+            }
+          }}
           placeholder="Member name" 
           className="min-w-[9rem] flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule transition focus:border-accent" 
         />
@@ -674,12 +697,11 @@ function MemberList({ members, addMember, onRequestRemove }: MemberListProps) {
   );
 }
 
-function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
-  const categories = ['bus','auto','petrol', 'car', 'hotel', 'food','other'];
+function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, existingCategories = [] }: ExpenseFormProps) {
   const [title, setTitle] = useState<string>('');
-  const [payerId, setPayerId] = useState<string>(members[0]?.id || '');
+  const [payerId, setPayerId] = useState<string>('');
   const [total, setTotal] = useState<string>('');
-  const [category, setCategory] = useState<string>('food');
+  const [category, setCategory] = useState<string>('');
   const [method, setMethod] = useState<'equal' | 'unequal'>('equal');
   const [selected, setSelected] = useState<string[]>(() => members.map((m: Member) => m.id));
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
@@ -689,17 +711,13 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
   const [splitPayment, setSplitPayment] = useState<boolean>(false);
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
 
-  // Errors are raised on submit, then cleared as the user addresses them, so
-  // the form never nags about a field they are still filling in.
-  const clearError = (k: keyof ExpenseErrors) =>
-    setErrors((prev: ExpenseErrors) => (prev[k] ? { ...prev, [k]: undefined } : prev));
-
   // Key on the member IDs, not the array identity: the parent rebuilds
   // `members` on every render, so depending on [members] re-ran this (and wiped
   // the in-progress form) continuously. Reconcile instead of resetting, so
   // adding a member mid-entry no longer discards the current selection.
   const memberKey = members.map((m: Member) => m.id).join(',');
   useEffect(() => {
+    if (editingExpense) return;
     const ids = members.map((m: Member) => m.id);
     setPayerId((prev: string) => (ids.includes(prev) ? prev : ids[0] || ''));
     setSelected((prev: string[]) => {
@@ -712,12 +730,40 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberKey]);
+  }, [memberKey, editingExpense]);
+
+  useEffect(() => {
+    if (editingExpense) {
+      setTitle(editingExpense.title);
+      setPayerId(editingExpense.payerId);
+      setTotal(String(editingExpense.total));
+      setCategory(editingExpense.category);
+      const isEq = isEqualSplit(editingExpense);
+      setMethod(isEq ? 'equal' : 'unequal');
+      setSelected(editingExpense.splits.map(s => s.memberId));
+      if (!isEq) {
+        const custom: Record<string, string> = {};
+        editingExpense.splits.forEach(s => { custom[s.memberId] = String(s.amount); });
+        setCustomSplits(custom);
+      } else {
+        setCustomSplits({});
+      }
+      if (editingExpense.payers) {
+        setSplitPayment(true);
+        const pay: Record<string, string> = {};
+        editingExpense.payers.forEach(s => { pay[s.memberId] = String(s.amount); });
+        setPayerAmounts(pay);
+      } else {
+        setSplitPayment(false);
+        setPayerAmounts({});
+      }
+    }
+  }, [editingExpense]);
 
   if (members.length === 0) {
     return (
       <div className="rounded-2xl border border-rule bg-surface p-5">
-        <h2 className="font-display text-xl tracking-tight mb-3">Add expense</h2>
+        <h2 className="font-display text-xl tracking-tight mb-3">{editingExpense ? 'Edit expense' : 'Add expense'}</h2>
         <div className="text-sm text-ink-subtle">Add at least one member before recording an expense.</div>
       </div>
     );
@@ -735,32 +781,47 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
-    onAdd({
-      id: newId(),
-      title: title.trim(),
-      // The first payer stays in payerId so anything reading the old field
-      // still sees a real person rather than an empty string.
-      payerId: payers.length > 0 ? payers[0].memberId : payerId,
-      ...(payers.length > 1 ? { payers } : {}),
-      total: Number(total),
-      splits,
-      category,
-      date: new Date().toISOString()
-    });
-    // reset
-    setTitle('');
-    setTotal('');
-    setSelected(members.map((m: Member) => m.id));
-    setCustomSplits({});
-    setMethod('equal');
-    setPayerAmounts({});
-    setSplitPayment(false);
-    setErrors({});
+    if (editingExpense && onUpdate) {
+      onUpdate({
+        ...editingExpense,
+        title: title.trim(),
+        payerId: payers.length > 0 ? payers[0].memberId : payerId,
+        payers,
+        total: Number(total),
+        splits,
+        category,
+      });
+    } else {
+      onAdd({
+        id: newId(),
+        title: title.trim(),
+        payerId: payers.length > 0 ? payers[0].memberId : payerId,
+        ...(payers.length > 1 ? { payers } : {}),
+        total: Number(total),
+        splits,
+        category,
+        date: new Date().toISOString()
+      });
+    }
+    
+    if (!editingExpense) {
+      setTitle('');
+      setTotal('');
+      setSelected(members.map((m: Member) => m.id));
+      setCustomSplits({});
+      setMethod('equal');
+      setPayerAmounts({});
+      setSplitPayment(false);
+      setErrors({});
+    }
   };
+
+  const clearError = (k: keyof ExpenseErrors) =>
+    setErrors((prev: ExpenseErrors) => (prev[k] ? { ...prev, [k]: undefined } : prev));
 
   return (
     <div className="rounded-2xl border border-rule bg-surface p-5">
-      <h5 className="font-medium mb-2">Add expense</h5>
+      <h5 className="font-medium mb-2">{editingExpense ? 'Edit expense' : 'Add expense'}</h5>
       <input
         value={title}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTitle(e.target.value); clearError('title'); }}
@@ -771,7 +832,7 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
       />
       <FieldError id="expense-title-error" message={errors.title} />
       <div className="mb-2" />
-      <div className="mb-2 flex flex-wrap gap-2">
+      <div className="mb-2 flex flex-wrap items-start gap-2">
         <select 
           value={payerId} 
           onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPayerId(e.target.value)} 
@@ -788,13 +849,31 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
           aria-describedby={errors.total ? 'expense-total-error' : undefined}
           className={`w-28 rounded-lg bg-surface p-2.5 text-sm tnum border transition ${errors.total ? 'border-debit' : 'border-rule focus:border-accent'}`}
         />
-        <select 
-          value={category} 
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategory(e.target.value)} 
-          className="min-w-[8rem] flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule bg-surface transition focus:border-accent"
-        >
-          {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <div className="flex-1 min-w-[8rem] relative">
+          <input
+            list="category-options"
+            value={category}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCategory(e.target.value)}
+            placeholder="Category (e.g. food, fuel)"
+            className="w-full min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule transition focus:border-accent mb-2"
+          />
+          <datalist id="category-options">
+            {existingCategories.map((c: string) => <option key={c} value={c} />)}
+            {Object.keys(CATEGORY_PATHS).filter(c => !existingCategories.includes(c)).map((c: string) => <option key={c} value={c} />)}
+          </datalist>
+          <div className="flex flex-wrap gap-1.5">
+            {['food', 'transport', 'stay', 'tickets', 'other'].map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategory(c)}
+                className={`px-3 py-1 text-[13px] rounded-full border transition-colors ${category.toLowerCase() === c ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
+              >
+                {c.charAt(0).toUpperCase() + c.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <FieldError id="expense-total-error" message={errors.total} />
 
@@ -895,20 +974,31 @@ function ExpenseForm({ members, onAdd }: ExpenseFormProps) {
         </div>
       )}
 
-      <div className="flex gap-2 justify-end">
-        <button 
-          className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
-          onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); setErrors({}); }}
-        >
-          Reset
+      <div className="mt-4 flex flex-wrap justify-end gap-3 border-t border-rule pt-4">
+        {onCancel ? (
+          <button
+            className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full border border-rule-strong px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken" 
+            onClick={() => { setTitle(''); setTotal(''); setMethod('equal'); setCustomSplits({}); setErrors({}); }}
+          >
+            Reset
+          </button>
+        )}
+        <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={submit}>
+          {editingExpense ? 'Update expense' : 'Add expense'}
         </button>
-        <button className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88" onClick={submit}>Add expense</button>
       </div>
     </div>
   );
 }
 
-function ExpenseList({ expenses, members, onDelete }: ExpenseListProps) {
+function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) {
   const nameOf = (id: string): string => members.find((m: Member) => m.id === id)?.name || 'Unknown';
   return (
     <div className="rounded-2xl border border-rule bg-surface p-5">
@@ -936,27 +1026,43 @@ function ExpenseList({ expenses, members, onDelete }: ExpenseListProps) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{e.title}</div>
                   <div className="truncate text-sm text-ink-muted">
-                    {payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid · {share}
+                    {e.category === 'settlement' && e.splits.length === 1 ? (
+                      `${payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid ${nameOf(e.splits[0].memberId)}`
+                    ) : (
+                      `${payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid · ${share}`
+                    )}
                   </div>
                 </div>
 
-                <div className="shrink-0 text-right">
+                <div className="shrink-0 text-right mr-2">
                   <div className="font-semibold tnum">₹{currency(e.total)}</div>
                   <div className="text-xs text-ink-subtle">
                     {new Date(e.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                   </div>
                 </div>
 
-                <button
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-subtle transition-opacity hover:bg-debit-soft hover:text-debit sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
-                  onClick={() => onDelete(e.id)}
-                  aria-label={`Remove ${e.title}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-4 w-4">
-                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
-                      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+                <div className="flex shrink-0">
+                  <button
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-subtle transition-opacity hover:bg-sunken hover:text-ink sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
+                    onClick={() => onEdit(e)}
+                    aria-label={`Edit ${e.title}`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-4 w-4">
+                      <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+                        stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-subtle transition-opacity hover:bg-debit-soft hover:text-debit sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
+                    onClick={() => onDelete(e.id)}
+                    aria-label={`Remove ${e.title}`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-4 w-4">
+                      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
+                        stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
               </li>
             );
           })}
@@ -966,7 +1072,7 @@ function ExpenseList({ expenses, members, onDelete }: ExpenseListProps) {
   );
 }
 
-function SummaryPanel({ trip }: SummaryPanelProps) {
+function SummaryPanel({ trip, onSettle }: SummaryPanelProps) {
   const members = ledgerMembers(trip);
   const totalsByMemberPaid: Record<string, number> = {};
   const totalsByMemberOwed: Record<string, number> = {};
@@ -1002,7 +1108,7 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
     const list = net.map(x => ({ ...x }));
     const debtors = list.filter(x => x.net < -0.005).map(x => ({ ...x, need: -x.net }));
     const creditors = list.filter(x => x.net > 0.005).map(x => ({ ...x, can: x.net }));
-    const ops: { from: string; to: string; amount: number }[] = [];
+    const ops: { from: string; fromId: string; to: string; toId: string; amount: number }[] = [];
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
       const d = debtors[i];
@@ -1010,7 +1116,7 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
       const amt = Math.min(d.need, c.can);
       // Round numerically rather than parsing currency()'s formatted output,
       // that string carries digit grouping and would parse back as NaN.
-      ops.push({ from: d.name, to: c.name, amount: Math.round(amt * 100) / 100 });
+      ops.push({ from: d.name, fromId: d.id, to: c.name, toId: c.id, amount: Math.round(amt * 100) / 100 });
       d.need -= amt; c.can -= amt;
       if (d.need <= 0.005) i++;
       if (c.can <= 0.005) j++;
@@ -1020,8 +1126,8 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
 
   const settle = settlements();
   const totalTrip = trip.expenses.reduce((s: number, e: Expense) => s + Number(e.total), 0);
-  const activeCount = trip.members.filter(isActive).length;
-  const perHead = activeCount ? totalTrip / activeCount : 0;
+  const involvedCount = trip.members.filter(m => (totalsByMemberPaid[m.id] || 0) > 0 || (totalsByMemberOwed[m.id] || 0) > 0).length;
+  const perHead = involvedCount ? totalTrip / involvedCount : 0;
 
   return (
     <div className="rounded-2xl border border-rule bg-surface p-5">
@@ -1058,6 +1164,14 @@ function SummaryPanel({ trip }: SummaryPanelProps) {
             <div className="mt-2 text-xs text-ink-subtle">
               {settle.length === 1 ? 'One transfer clears' : `${settle.length} transfers clear`} the whole group.
             </div>
+            {onSettle && (
+              <button 
+                onClick={() => onSettle(settle)}
+                className="mt-4 w-full inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+              >
+                Settle all dues
+              </button>
+            )}
           </>
         )}
       </div>
@@ -1219,6 +1333,7 @@ export default function TripExpenseApp() {
   }, [setTrips]);
   const [showNew, setShowNew] = useState<boolean>(false);
   const [openTripId, setOpenTripId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Member | null>(null);
   // SheetJS arrives in a lazy 139 kB chunk. On a slow connection the button
   // would sit silent for seconds and get clicked repeatedly.
@@ -1233,6 +1348,15 @@ export default function TripExpenseApp() {
   // Only offered once per account, so a decline stays declined.
   const [adoptAsked, setAdoptAsked] = useLocalState<Record<string, boolean>>('hisaab_adopt_asked', {});
   const [orphans, setOrphans] = useState<Trip[] | null>(null);
+  
+  const [showLoader, setShowLoader] = useState<boolean>(seenLanding);
+
+  useEffect(() => {
+    if (showLoader && seenLanding) {
+      const t = setTimeout(() => setShowLoader(false), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [showLoader, seenLanding]);
 
   const sync = useSync(user?.id ?? null, trips, setTrips);
 
@@ -1250,7 +1374,7 @@ export default function TripExpenseApp() {
   };
 
   const openTrip = (id: string) => setOpenTripId(id);
-  const closeTrip = () => setOpenTripId(null);
+  const closeTrip = () => { setOpenTripId(null); setEditingExpenseId(null); };
 
   const updateTrip = (updated: Trip) => {
     setTrips((prev: Trip[]) => prev.map((t: Trip) => t.id === updated.id ? stampNow(updated) : t));
@@ -1330,7 +1454,7 @@ export default function TripExpenseApp() {
           onToggleTheme={toggleTheme}
           signedIn={!!user}
           onSignIn={isBackendConfigured ? () => setSignInReason('Keep your trips across devices.') : undefined}
-          onStart={() => { setSeenLanding(true); setShowNew(true); }}
+          onStart={() => { setSeenLanding(true); setShowLoader(true); }}
         />
         {signInReason !== null && (
           <Modal onClose={() => setSignInReason(null)} labelledBy="signin-title" width="max-w-md">
@@ -1346,66 +1470,74 @@ export default function TripExpenseApp() {
   }
 
   return (
-    // A short fade on arrival, so the app resolves into place instead of
-    // replacing the landing between one frame and the next.
-    <div className="app-enter min-h-screen bg-canvas p-6 font-sans">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="font-display text-2xl tracking-tight">
-              <button
-                type="button"
-                onClick={() => setSeenLanding(false)}
-                title="Back to the Hisaab home page"
-                className="rounded-full transition-opacity hover:opacity-70"
-              >
-                Hisaab
-              </button>
-            </h1>
-            <SyncStatus
-              phase={sync.phase}
-              onRetry={sync.retry}
-              onSignIn={() => setSignInReason('Sign in again to keep syncing.')}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
-            {isBackendConfigured && (
-              user ? (
+    <>
+      <AnimatePresence>
+        {showLoader && <LoadingScreen />}
+      </AnimatePresence>
+      <div className="app-enter min-h-screen bg-canvas p-6 font-sans relative overflow-hidden">
+        {/* Ledger Background Pattern */}
+        <div className="fixed inset-0 z-0 opacity-[0.25] pointer-events-none" aria-hidden>
+          <div className="h-full w-full" style={{ backgroundImage: 'linear-gradient(to bottom, rgb(var(--rule)) 1px, transparent 1px)', backgroundSize: '100% 40px' }} />
+          <div className="absolute top-0 left-[8%] sm:left-[12%] h-full w-[1px] bg-debit/20" />
+        </div>
+
+        <div className="max-w-6xl mx-auto relative z-10">
+          <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
+            <div>
+              <h1 className="font-display text-[1.35rem] font-semibold tracking-tighter text-ink">
                 <button
-                  onClick={() => signOut()}
-                  title={user.email || 'Signed in'}
-                  className="inline-flex min-h-[2.75rem] items-center rounded-full px-4 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
+                  type="button"
+                  onClick={() => setSeenLanding(false)}
+                  title="Back to the Hisaab home page"
+                  className="rounded-full transition-opacity hover:opacity-70 text-inherit"
                 >
-                  Sign out
+                  Hisaab
                 </button>
-              ) : (
+              </h1>
+              <SyncStatus
+                phase={sync.phase}
+                onRetry={sync.retry}
+                onSignIn={() => setSignInReason('Sign in again to keep syncing.')}
+              />
+            </div>
+            <div className="flex items-center gap-1 sm:gap-2 bg-surface sm:bg-transparent border sm:border-0 border-rule border-l-0 sm:border-l-0 rounded-r-full sm:rounded-none -ml-6 sm:ml-0 pl-6 sm:pl-0 pr-1 sm:pr-0 py-1 sm:py-0 shadow-sm sm:shadow-none">
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+              {isBackendConfigured && (
+                user ? (
+                  <button
+                    onClick={() => signOut()}
+                    title={user.email || 'Signed in'}
+                    className="inline-flex min-h-[2.25rem] items-center rounded-full px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+                  >
+                    Sign out
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setSignInReason('')}
+                    className="inline-flex min-h-[2.25rem] items-center rounded-full px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+                  >
+                    Sign in
+                  </button>
+                )
+              )}
+              {/* Destructive and irreversible, so it stays out of reach of the
+                  primary action and only appears when there is data to lose. */}
+              {!current && trips.length > 0 && (
                 <button
-                  onClick={() => setSignInReason('')}
-                  className="inline-flex min-h-[2.75rem] items-center rounded-full px-4 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-sunken hover:text-ink"
+                  className="rounded-full px-3 py-2 min-h-[2.25rem] text-sm font-medium text-ink-muted transition-colors hover:bg-debit-soft hover:text-debit"
+                  onClick={resetAllData}
                 >
-                  Sign in
+                  Reset data
                 </button>
-              )
-            )}
-            {/* Destructive and irreversible, so it stays out of reach of the
-                primary action and only appears when there is data to lose. */}
-            {!current && trips.length > 0 && (
+              )}
               <button
-                className="rounded-full px-3 py-2 text-sm font-medium text-ink-subtle transition-colors hover:bg-debit-soft hover:text-debit"
-                onClick={resetAllData}
+                className="inline-flex min-h-[2.25rem] ml-1 items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
+                onClick={() => setShowNew(true)}
               >
-                Reset data
+                New trip
               </button>
-            )}
-            <button
-              className="inline-flex min-h-[2.75rem] items-center justify-center rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-ink/88"
-              onClick={() => setShowNew(true)}
-            >
-              New trip
-            </button>
-          </div>
-        </header>
+            </div>
+          </header>
 
         {!current && trips.length === 0 && sync.skeleton && (
           <main>
@@ -1431,7 +1563,10 @@ export default function TripExpenseApp() {
             answer is not yet known. */}
         {!current && trips.length === 0 && !sync.skeleton && !sync.pullFailed && sync.hydrated && (
           <main>
-            <EmptyState onCreate={() => setShowNew(true)} />
+            <EmptyState 
+              onCreate={() => setShowNew(true)} 
+              onReadGuide={() => setSeenLanding(false)}
+            />
           </main>
         )}
 
@@ -1439,13 +1574,13 @@ export default function TripExpenseApp() {
           // Trip cards sit on the canvas rather than inside a panel: a card
           // holding cards is a container standing in for a heading.
           <main>
-            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-3">
-              <h2 className="font-display text-xl tracking-tight">Your trips</h2>
-              <p className="text-sm text-ink-subtle tnum">
+            <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-b border-rule pb-4">
+              <h2 className="font-display text-3xl tracking-tight text-ink">Your trips</h2>
+              <p className="text-base font-medium text-ink-muted tnum">
                 {trips.length} trip{trips.length === 1 ? '' : 's'} · ₹{currency(trips.reduce((s: number, t: Trip) => s + t.expenses.reduce((ss: number, e: Expense) => ss + Number(e.total), 0), 0))} logged
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {trips.map((t: Trip) => (
                 <TripCard key={t.id} trip={t} onOpen={openTrip} onDelete={deleteTrip} />
               ))}
@@ -1517,6 +1652,7 @@ export default function TripExpenseApp() {
               <div className={`space-y-4 lg:col-span-2 lg:col-start-1 lg:row-start-2 ${tab === 'expenses' ? '' : 'hidden'} lg:block`}>
                 <ExpenseForm 
                   members={activeMembers}
+                  existingCategories={Array.from(new Set(current.expenses.map((e: Expense) => e.category)))}
                   onAdd={(exp: Expense) => {
                     const upd = { ...current, expenses: [...current.expenses, exp] }; 
                     updateTrip(upd); 
@@ -1529,14 +1665,27 @@ export default function TripExpenseApp() {
                   onDelete={(id: string) => { 
                     const upd = { ...current, expenses: current.expenses.filter((e: Expense) => e.id !== id) }; 
                     updateTrip(upd); 
-                  }} 
+                  }}
+                  onEdit={(exp: Expense) => setEditingExpenseId(exp.id)}
                 />
               </div>
 
               </div>
 
               <div className={`space-y-4 lg:col-start-3 lg:row-start-1 lg:row-end-3 ${tab === 'settle' ? '' : 'hidden'} lg:block`}>
-                <SummaryPanel trip={current} />
+                <SummaryPanel trip={current} onSettle={(settlements) => {
+                  const newExpenses = settlements.map(s => ({
+                    id: newId(),
+                    title: 'Settled dues',
+                    payerId: s.fromId,
+                    total: s.amount,
+                    splits: [{ memberId: s.toId, amount: s.amount }],
+                    category: 'settlement',
+                    date: new Date().toISOString()
+                  }));
+                  updateTrip({ ...current, expenses: [...current.expenses, ...newExpenses] });
+                  setTab('expenses');
+                }} />
                 <div className="rounded-2xl border border-rule bg-surface p-5">
                   <h2 className="font-display text-xl tracking-tight mb-3">Actions</h2>
 <div className="space-y-2">
@@ -1662,7 +1811,11 @@ export default function TripExpenseApp() {
         )}
       </div>
 
-      {showNew && <NewTripModal onClose={() => setShowNew(false)} onCreate={createTrip} />}
+      {showNew && <NewTripModal onClose={() => setShowNew(false)} onCreate={(t: Trip) => {
+        createTrip(t);
+        openTrip(t.id);
+        setTab('people');
+      }} />}
       {signInReason !== null && (
         <Modal onClose={() => setSignInReason(null)} labelledBy="signin-title" width="max-w-md">
           <SignIn
@@ -1685,6 +1838,25 @@ export default function TripExpenseApp() {
           onConfirm={confirmRemoval}
         />
       )}
+      {editingExpenseId && current && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-sm" onClick={() => setEditingExpenseId(null)}>
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <ExpenseForm
+              members={activeMembers}
+              existingCategories={Array.from(new Set(current.expenses.map((e: Expense) => e.category)))}
+              editingExpense={current.expenses.find((e: Expense) => e.id === editingExpenseId)}
+              onAdd={() => {}}
+              onUpdate={(exp: Expense) => {
+                const upd = { ...current, expenses: current.expenses.map((e: Expense) => e.id === exp.id ? exp : e) };
+                updateTrip(upd);
+                setEditingExpenseId(null);
+              }}
+              onCancel={() => setEditingExpenseId(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
+    </>
   );
 }
