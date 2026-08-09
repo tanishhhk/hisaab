@@ -40,6 +40,14 @@ export interface Trip {
   name: string;
   members: Member[];
   expenses: Expense[];
+  // Sort key for the trip list. Stable under edits, which is why the list is
+  // ordered by this and not by updatedAt.
+  createdAt?: string;
+  // Last-write-wins stamp, and always the value the server returned rather
+  // than a client guess: the trips_touch trigger rewrites updated_at on every
+  // update, so a guess would make the remote copy look permanently newer and
+  // re-pull on every load. Absent means this trip has never synced.
+  updatedAt?: string;
 }
 
 interface NewTripModalProps {
