@@ -32,6 +32,19 @@ export async function signOut(): Promise<void> {
   await supabase?.auth.signOut();
 }
 
+// Google's mark, in its own colours, because an OAuth button that restyles a
+// provider's logo reads as a phishing page rather than a sign-in.
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 18 18" aria-hidden className="h-[18px] w-[18px]">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z" />
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z" />
+    </svg>
+  );
+}
+
 export default function SignIn({ reason, onClose, onSignedIn }: {
   reason?: string;
   onClose: () => void;
@@ -42,6 +55,24 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // One tap, no email round trip, and nothing for the person to read, copy or
+  // mistype. This is the path almost everyone should take; the email code
+  // stays for anyone without a Google account.
+  const withGoogle = async () => {
+    if (!supabase) return setError('Sign in is not available right now.');
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/app` },
+    });
+    // Only reached if the redirect never happens; on success the page leaves.
+    if (err) {
+      setBusy(false);
+      setError(err.message);
+    }
+  };
 
   const sendCode = async () => {
     const trimmed = email.trim();
@@ -122,13 +153,28 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
             and means switching the template later needs no change here. */}
         <p className="mt-1 text-sm text-ink-muted">
           {step === 'email'
-            ? reason || 'We will email you a link to tap, or a code to type. No password to remember.'
+            ? reason || 'One tap with Google, or an emailed code. No password to remember.'
             : `Sent to ${email.trim()}. Tap the link in it, or type the code below if that is what arrived. Either expires in an hour.`}
         </p>
       </div>
 
       {step === 'email' ? (
         <>
+          <button
+            onClick={withGoogle}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-2.5 rounded-full border border-rule-strong bg-surface px-4 py-2.5 text-sm font-medium transition-colors hover:bg-sunken disabled:opacity-60"
+          >
+            <GoogleMark />
+            Continue with Google
+          </button>
+
+          <div className="flex items-center gap-3 text-xs text-ink-subtle">
+            <span aria-hidden className="h-px flex-1 bg-rule" />
+            or use email
+            <span aria-hidden className="h-px flex-1 bg-rule" />
+          </div>
+
           <input
             type="email"
             autoFocus
