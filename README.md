@@ -171,6 +171,8 @@ Then apply the migrations, in order, in the Supabase SQL Editor:
 | 2 | `0002_sync.sql` | Invariants, payments, position, row caps |
 | 3 | `0003_write_path.sql` | `save_trip` and `delete_trip` |
 | 4 | `0004_close_remaining_grants.sql` | Locks the tables to read-only |
+| 5 | `0005_per_entity_sync.sql` | Fine-grained per-entity synchronization |
+| 6 | `0006_shared_trips.sql` | Shared trips, collaborative editing, and join codes |
 
 Sign-in is a six digit code by email. No password to choose, forget, or reset.
 
@@ -206,7 +208,7 @@ the token in the URL is honoured rather than silently ignored.
 
 ## Before going live
 
-- [ ] All four migrations applied, in order.
+- [ ] All six migrations applied, in order.
 - [ ] Grants verified. `authenticated` should hold `SELECT` and nothing else:
 
   ```sql

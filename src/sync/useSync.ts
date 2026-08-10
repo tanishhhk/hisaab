@@ -174,6 +174,9 @@ export function useSync(
         : await removeExpense(id);
       if (r.ok) {
         stateRef.current.deleted = stateRef.current.deleted.filter((x: string) => x !== key);
+      } else if (r.kind === 'db') {
+        console.warn('Deletion rejected by server:', r.message);
+        stateRef.current.deleted = stateRef.current.deleted.filter((x: string) => x !== key);
       } else {
         failure = r.kind;
         break;
@@ -205,6 +208,12 @@ export function useSync(
           // Take the server's stamp for the row that was written. A local
           // guess would lose to the touch trigger and re-pull forever.
           stampEntity(setTrips, found.trip.id, kind, id, r.value);
+          stateRef.current.dirty = stateRef.current.dirty.filter((x: string) => x !== key);
+        } else if (r.kind === 'db') {
+          // A database error (like "no such trip" or a validation failure) is
+          // permanent. Retrying it will never succeed, so we drop the edit and
+          // let the next pull overwrite it with the server's truth.
+          console.warn('Edit rejected by server:', r.message);
           stateRef.current.dirty = stateRef.current.dirty.filter((x: string) => x !== key);
         } else {
           failure = r.kind;
