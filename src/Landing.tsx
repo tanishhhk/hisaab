@@ -733,14 +733,21 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
             </div>
 
             <div className="relative h-[75vh] lg:h-[70vh] min-h-[550px] flex justify-center lg:justify-start">
-              <motion.div 
-                style={still ?? { opacity: chatOpacity, filter: chatBlur }}
-                className="relative w-full max-w-[320px] h-[650px] lg:h-auto lg:aspect-[9/19] rounded-[3rem] border-[12px] border-[#1a1a1a] dark:border-[#0a0a0a] bg-[#f8f9fa] dark:bg-[#111111] overflow-hidden ring-1 ring-white/10 shadow-2xl"
+              <div 
+                className="w-full flex justify-center lg:block lg:w-auto"
+                style={{ 
+                  transform: 'scale(min(1, calc((100dvh - 280px) / 650)))', 
+                  transformOrigin: 'top center' 
+                }}
               >
-                {/* iPhone Notch */}
-                <div className="absolute top-0 inset-x-0 h-6 flex justify-center z-20 pointer-events-none">
-                  <div className="w-[120px] h-full bg-[#1a1a1a] dark:bg-[#0a0a0a] rounded-b-3xl" />
-                </div>
+                <motion.div 
+                  style={still ?? { opacity: chatOpacity, filter: chatBlur }}
+                  className="relative w-full max-w-[320px] h-[650px] lg:h-auto lg:aspect-[9/19] rounded-[3rem] border-[12px] border-[#1a1a1a] dark:border-[#0a0a0a] bg-[#f8f9fa] dark:bg-[#111111] overflow-hidden ring-1 ring-white/10 shadow-2xl"
+                >
+                  {/* iPhone Notch */}
+                  <div className="absolute top-0 inset-x-0 h-6 flex justify-center z-20 pointer-events-none">
+                    <div className="w-[120px] h-full bg-[#1a1a1a] dark:bg-[#0a0a0a] rounded-b-3xl" />
+                  </div>
                 
                 <motion.div
                   style={still ?? { y: chatY }}
@@ -752,6 +759,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
                   ))}
                 </motion.div>
               </motion.div>
+              </div>
 
               <motion.div
                 style={still ?? { opacity: answerOpacity, y: answerY, scale: answerScale }}
