@@ -720,13 +720,13 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
 
       {/* The turn. One long scroll in which the mess is replaced by the answer. */}
       <section id="chat" ref={turnRef} className="relative h-[250vh] lg:h-[220vh] mt-[15vh] lg:mt-[20vh] mb-[15vh] lg:mb-0">
-        <div className="sticky top-16 lg:top-24 overflow-hidden">
-          <div className="mx-auto grid w-full max-w-7xl gap-10 px-6 lg:grid-cols-2 lg:items-start">
+        <div className="sticky top-4 lg:top-24 overflow-hidden">
+          <div className="mx-auto grid w-full max-w-7xl gap-6 lg:gap-10 px-6 lg:grid-cols-2 lg:items-start">
             <div>
               <h2 className="max-w-[15ch] font-display text-[clamp(1.9rem,4.4vw,3.25rem)] font-semibold leading-[1.02] tracking-tighter">
                 Three days later, in the group chat.
               </h2>
-              <p className="mt-5 max-w-[44ch] text-lg text-ink-muted">
+              <p className="mt-2 lg:mt-5 max-w-[44ch] text-base lg:text-lg text-ink-muted">
                 The maths was never the hard part. Remembering who paid for
                 what, three days later, is.
               </p>
@@ -734,15 +734,15 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
 
             <div className="relative h-[75vh] lg:h-[70vh] min-h-[550px] flex justify-center lg:justify-start">
               <div 
-                className="w-full flex justify-center lg:block lg:w-auto"
+                className="w-full max-w-[320px] mx-auto lg:mx-0 flex justify-center lg:block"
                 style={{ 
-                  transform: 'scale(min(1, calc((100dvh - 280px) / 650)))', 
+                  transform: 'scale(min(1, calc((100dvh - 300px) / 650)))', 
                   transformOrigin: 'top center' 
                 }}
               >
                 <motion.div 
                   style={still ?? { opacity: chatOpacity, filter: chatBlur }}
-                  className="relative w-full max-w-[320px] h-[650px] lg:h-auto lg:aspect-[9/19] rounded-[3rem] border-[12px] border-[#1a1a1a] dark:border-[#0a0a0a] bg-[#f8f9fa] dark:bg-[#111111] overflow-hidden ring-1 ring-white/10 shadow-2xl"
+                  className="relative w-full h-[650px] lg:h-auto lg:aspect-[9/19] rounded-[3rem] border-[12px] border-[#1a1a1a] dark:border-[#0a0a0a] bg-[#f8f9fa] dark:bg-[#111111] overflow-hidden ring-1 ring-white/10 shadow-2xl"
                 >
                   {/* iPhone Notch */}
                   <div className="absolute top-0 inset-x-0 h-6 flex justify-center z-20 pointer-events-none">
