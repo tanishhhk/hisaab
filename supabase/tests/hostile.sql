@@ -154,3 +154,114 @@ select public.save_trip('{
 select count(*) as should_be_zero from public.expenses
  where trip_id = 'aaaaaaaa-0000-4000-8000-000000000008'::uuid;
 rollback;
+
+-- ===========================================================================
+-- Shared trips (0006). Two real users are needed here, so substitute both ids
+-- before running. A is the trip owner; B is a stranger who has never joined.
+--   :'uid'  -> user A
+--   :'uidb' -> user B
+-- ===========================================================================
+\set uidb '11111111-1111-1111-1111-111111111111'
+
+-- ---------------------------------------------------------------------------
+-- 9. A stranger cannot read a trip they have not joined.
+--    EXPECT: 0 rows, not an error. Row level security filters, it does not
+--    raise, and a filtered read is indistinguishable from an empty database.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', :'uidb', 'role', 'authenticated')::text, true);
+
+select count(*) as should_be_zero from public.trips;
+select count(*) as should_be_zero from public.expenses;
+select count(*) as should_be_zero from public.trip_access;
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 10. A stranger cannot write into someone else's trip.
+--     EXPECT: ERROR you are not in that trip
+--     Substitute a trip id that user A actually owns.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', :'uidb', 'role', 'authenticated')::text, true);
+
+select public.save_expense(
+  (select id from public.trips limit 1),
+  '{"id":"cccccccc-0000-4000-8000-000000000010","title":"Not mine",
+    "payer_id":"bbbbbbbb-0000-4000-8000-000000000010","total":50,
+    "category":"other","spent_at":"2026-01-01T00:00:00Z","position":0,
+    "splits":[],"payments":null}'::jsonb);
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 11. THE ONE THAT MATTERS MOST. Granting yourself access by inserting a row
+--     directly. If this succeeds the join code is decorative and the whole
+--     access model is bypassable in a single request.
+--     EXPECT: ERROR permission denied for table trip_access
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', :'uidb', 'role', 'authenticated')::text, true);
+
+insert into public.trip_access (trip_id, user_id)
+values ((select id from public.trips limit 1), :'uidb'::uuid);
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 12. A closed trip refuses its own code.
+--     EXPECT: ERROR that code does not work
+--     Run set_join_open(<trip>, false) as the owner first.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 13. Renaming a member somebody else has claimed.
+--     Set up as A: claim a member, then attempt the rename as B after B has
+--     legitimately joined.
+--     EXPECT: ERROR only the person it belongs to can change that name
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 14. A joiner cannot use the owner's controls.
+--     Run each as B, after B has joined.
+--     EXPECT: ERROR only the trip owner can do that
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', :'uidb', 'role', 'authenticated')::text, true);
+
+select public.reset_join_code((select id from public.trips limit 1));
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 15. The owner cannot leave their own trip, because a trip with no owner has
+--     nobody who can delete it or reset its code.
+--     EXPECT: ERROR the owner cannot leave their own trip
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', :'uid', 'role', 'authenticated')::text, true);
+
+select public.leave_trip((select id from public.trips where owner = :'uid'::uuid limit 1));
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 16. Claiming twice in one trip.
+--     Run claim_member as B against two different members after joining.
+--     EXPECT on the second: ERROR you have already claimed someone in this trip
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 17. MUST SUCCEED. The happy path, so a green run is not just everything
+--     being broken:
+--       as B: join_trip('<code>')            -> returns the trip id
+--       as B: claim_member(<trip>, <member>, 'Their Name')
+--       as B: save_expense(<trip>, {...})    -> succeeds, B is now in the trip
+--       as B: leave_trip(<trip>)             -> succeeds
+--       as B: select count(*) from trips     -> back to 0
+-- ---------------------------------------------------------------------------
