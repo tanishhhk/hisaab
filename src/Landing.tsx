@@ -594,10 +594,26 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
   onToggleTheme: () => void;
 }) {
   const [showLoader, setShowLoader] = useState(true);
+  const [phoneScale, setPhoneScale] = useState(1);
 
   useEffect(() => {
     const t = setTimeout(() => setShowLoader(false), 2600);
     return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    function handleResize() {
+      const needed = 830; // 650px phone + ~180px for header/text/padding
+      const available = window.innerHeight;
+      if (available < needed) {
+        setPhoneScale(available / needed);
+      } else {
+        setPhoneScale(1);
+      }
+    }
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const reduce = useReducedMotion();
@@ -736,7 +752,7 @@ export default function Landing({ onStart, onSignIn, signedIn, theme, onToggleTh
               <div 
                 className="w-full max-w-[320px] mx-auto lg:mx-0 flex justify-center lg:block"
                 style={{ 
-                  transform: 'scale(min(1, calc((100dvh - 300px) / 650)))', 
+                  transform: `scale(${phoneScale})`, 
                   transformOrigin: 'top center' 
                 }}
               >
