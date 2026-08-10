@@ -1028,7 +1028,7 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
             list="category-options"
             value={category}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCategory(e.target.value)}
-            placeholder="Category (e.g. food, fuel)"
+            placeholder="Type to add a new Category (e.g. Food,fuel,travel)"
             className="w-full min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm border border-rule transition focus:border-accent mb-2"
           />
           <datalist id="category-options">
