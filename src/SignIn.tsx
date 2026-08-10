@@ -51,7 +51,17 @@ export default function SignIn({ reason, onClose, onSignedIn }: {
     setError('');
     const { error: err } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        // Without this, the link in the email goes to whatever Site URL is set
+        // in the Supabase dashboard, which defaults to localhost:3000 and is a
+        // single global value. Deriving it from the current origin means a
+        // link opened from production returns to production and one opened in
+        // development returns to development. The origin still has to be on
+        // Supabase's redirect allow-list, which is what stops this being an
+        // open redirect.
+        emailRedirectTo: `${window.location.origin}/app`,
+      },
     });
     setBusy(false);
     if (err) return setError(err.message);
