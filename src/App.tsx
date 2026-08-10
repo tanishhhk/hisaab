@@ -1347,6 +1347,23 @@ function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) 
 }
 
 function SummaryPanel({ trip, onSettle }: SummaryPanelProps) {
+  const [showReceipt, setShowReceipt] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
+
+  const downloadReceipt = async () => {
+    if (receiptRef.current) {
+      try {
+        const dataUrl = await htmlToImage.toPng(receiptRef.current);
+        const link = document.createElement('a');
+        link.download = `receipt-${(trip.name || 'trip').replace(/\s+/g, '-').toLowerCase()}-summary.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error('Failed to generate receipt', err);
+      }
+    }
+  };
+
   const members = ledgerMembers(trip);
   const totalsByMemberPaid: Record<string, number> = {};
   const totalsByMemberOwed: Record<string, number> = {};
@@ -1519,6 +1536,78 @@ function SummaryPanel({ trip, onSettle }: SummaryPanelProps) {
           </div>
         )}
       </div>
+
+      <div className="mt-6 flex flex-wrap justify-between items-center gap-3 border-t border-rule pt-4">
+        <label className="group flex items-center gap-2.5 text-sm font-medium text-ink cursor-pointer hover:text-ink-strong transition-colors bg-surface border border-rule-strong rounded-xl px-4 py-2 hover:bg-sunken hover:border-ink hover:shadow-sm">
+          <div className="relative flex items-center">
+            <input type="checkbox" checked={showReceipt} onChange={(e) => setShowReceipt(e.target.checked)} className="peer sr-only" />
+            <div className="w-5 h-5 border-2 border-rule-strong rounded-[6px] bg-surface peer-checked:bg-ink peer-checked:border-ink transition-all"></div>
+            <svg className="absolute inset-0 w-5 h-5 text-canvas opacity-0 peer-checked:opacity-100 scale-50 peer-checked:scale-100 transition-all duration-200 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          Preview Summary Receipt
+        </label>
+      </div>
+
+      {showReceipt && (
+        <div className="mt-8 mb-4 border-t border-rule pt-6">
+          <div className="flex justify-between items-center mb-4">
+             <h6 className="font-display font-medium text-lg">Trip Receipt Preview</h6>
+             <button onClick={downloadReceipt} className="text-xs font-bold uppercase tracking-wider text-accent hover:text-accent-soft transition-colors flex items-center gap-1">
+               Download PNG
+             </button>
+          </div>
+          <div className="w-full max-w-[26rem] mx-auto text-[#111] font-mono text-[0.9rem] leading-relaxed relative drop-shadow-2xl" ref={receiptRef}>
+            <div className="h-2 w-full" style={{ background: 'radial-gradient(circle at 50% 0, transparent 4px, #fdfbf7 4.5px)', backgroundSize: '10px 10px', backgroundRepeat: 'repeat-x' }}></div>
+            
+            <div className="bg-[#fdfbf7] px-6 sm:px-8 pt-8 pb-4">
+              <div className="border-b-2 border-dashed border-[#ccc] pb-6 text-center">
+                <h3 className="text-xl font-bold tracking-[0.15em] uppercase">{trip.name || 'Trip'} Summary</h3>
+                <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">Final Settlement</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.1em] text-[#555]">{new Date().toLocaleDateString()}</p>
+              </div>
+
+              <div className="divide-y-2 divide-dashed divide-[#ccc]">
+                {settle.length === 0 ? (
+                  <p className="py-8 text-center text-xs uppercase tracking-[0.1em] text-[#888]">
+                    All settled. Nobody owes anybody.
+                  </p>
+                ) : (
+                  settle.map((s, idx) => (
+                    <div key={idx} className="py-6">
+                      <div className="font-bold uppercase text-[0.8rem] mb-3 text-[#111] flex justify-between items-center">
+                        <span className="truncate">{s.from}</span>
+                        <span className="text-[#888] mx-2 shrink-0">→</span>
+                        <span className="truncate">{s.to}</span>
+                      </div>
+                      <div className="mt-5 relative z-10 max-w-[90%] ml-auto">
+                        <div className="absolute inset-0 bg-[#bbf7d0] transform -skew-x-12 -rotate-2 rounded-sm opacity-60"></div>
+                        <div className="relative px-3 py-2 font-sans text-xs text-[#166534] font-medium flex justify-between items-end">
+                           <span className="flex flex-col">
+                             <span className="uppercase tracking-wider text-[#14532d] text-[10px] mb-0.5">Pays</span>
+                           </span>
+                           <span className="text-lg font-bold tracking-tight">₹{currency(s.amount)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="border-t-2 border-dashed border-[#ccc] pt-6">
+                <div className="flex items-end justify-between font-bold border-t-2 border-[#111] pt-3 mt-1">
+                  <span className="text-lg uppercase">Total Trip</span>
+                  <span className="text-2xl tracking-tighter">₹{currency(totalTrip)}</span>
+                </div>
+                <div className="mt-8 text-center text-[#555] text-[10px] uppercase space-y-1 opacity-80 font-sans tracking-wide pb-4">
+                  <p>TO THE BEST TRIP EVER ❤️</p>
+                  <p className="mt-2 font-bold text-[#111] text-xs">Thank you!</p>
+                </div>
+              </div>
+            </div>
+            <div className="h-2 w-full" style={{ background: 'radial-gradient(circle at 50% 100%, transparent 4px, #fdfbf7 4.5px)', backgroundSize: '10px 10px', backgroundRepeat: 'repeat-x' }}></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
