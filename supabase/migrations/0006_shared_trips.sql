@@ -300,7 +300,7 @@ begin
     coalesce((member->>'position')::int, 0),
     null
   )
-  on conflict (id, trip_id) do update
+  on conflict on constraint members_id_trip_key do update
      set name = excluded.name,
          active = excluded.active,
          position = excluded.position,

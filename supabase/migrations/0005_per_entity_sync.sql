@@ -116,7 +116,7 @@ begin
   -- Arbitrated on (id, trip_id), not id alone: member ids are client-supplied
   -- and globally unique, so an id belonging to another trip must collide with
   -- the primary key and abort rather than quietly update that other trip's row.
-  on conflict (id, trip_id) do update
+  on conflict on constraint members_id_trip_key do update
      set name = excluded.name,
          active = excluded.active,
          position = excluded.position,
@@ -170,7 +170,7 @@ begin
     coalesce((expense->>'position')::int, 0),
     null
   )
-  on conflict (id, trip_id) do update
+  on conflict on constraint expenses_id_trip_key do update
      set title = excluded.title,
          payer_id = excluded.payer_id,
          total = excluded.total,
