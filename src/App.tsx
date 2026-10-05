@@ -43,6 +43,7 @@ export interface Expense {
   total: number;
   splits: Split[];
   category: string;
+  paymentMethod?: 'UPI' | 'Cash' | 'Card';
   date: string;
   // As with Member: this expense's own server stamp. Two people adding
   // different expenses must not overwrite each other, so the merge happens
@@ -773,6 +774,9 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
   const [errors, setErrors] = useState<ExpenseErrors>({});
   const [splitPayment, setSplitPayment] = useState<boolean>(false);
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
+  const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Cash' | 'Card'>(() => {
+    return (localStorage.getItem('defaultPaymentMethod') as 'UPI' | 'Cash' | 'Card') || 'UPI';
+  });
   const [showInvoice, setShowInvoice] = useState(false);
   // The exact split the receipt shows, produced by the same function that
   // will store it. Empty while there is no amount yet, so the preview says
@@ -830,6 +834,9 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
       setPayerId(editingExpense.payerId);
       setTotal(String(editingExpense.total));
       setCategory(editingExpense.category);
+      if (editingExpense.paymentMethod) {
+        setPaymentMethod(editingExpense.paymentMethod);
+      }
       const isEq = isEqualSplit(editingExpense);
       setMethod(isEq ? 'equal' : 'unequal');
       setSelected(editingExpense.splits.map(s => s.memberId));
@@ -882,6 +889,7 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
         total: Number(total),
         splits,
         category,
+        paymentMethod,
       });
     } else {
       onAdd({
@@ -892,6 +900,7 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
         total: Number(total),
         splits,
         category,
+        paymentMethod,
         date: new Date().toISOString()
       });
     }
@@ -905,6 +914,8 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
       setPayerAmounts({});
       setSplitPayment(false);
       setErrors({});
+      // Keep the toggled one for the next payment
+      localStorage.setItem('defaultPaymentMethod', paymentMethod);
     }
   };
 
@@ -936,7 +947,11 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   setSplitPayment(e.target.checked);
                   if (e.target.checked) {
-                    setPayerAmounts({ [payerId]: total });
+                    if (members.length === 2) {
+                      setPayerAmounts({ [members[0].id]: '', [members[1].id]: '' });
+                    } else {
+                      setPayerAmounts({ [payerId]: total });
+                    }
                   } else {
                     setPayerAmounts({});
                   }
@@ -1034,7 +1049,7 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
           <datalist id="category-options">
             {existingCategories.map((c: string) => <option key={c} value={c} />)}
           </datalist>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 mb-4">
             {existingCategories.map(c => (
               <button
                 key={c}
@@ -1043,6 +1058,23 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
                 className={`px-3 py-1 text-[13px] rounded-full border transition-colors ${category.toLowerCase() === c.toLowerCase() ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
               >
                 {c.charAt(0).toUpperCase() + c.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-sm text-ink-muted mb-2">Payment Method</div>
+          <div className="flex gap-2">
+            {(['UPI', 'Cash', 'Card'] as const).map(method => (
+              <button
+                key={method}
+                type="button"
+                onClick={() => {
+                  setPaymentMethod(method);
+                  localStorage.setItem('defaultPaymentMethod', method);
+                }}
+                className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${paymentMethod === method ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
+              >
+                {method}
               </button>
             ))}
           </div>
@@ -1263,19 +1295,108 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
   );
 }
 
-function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) {
+function TripCharts({ expenses, members }: { expenses: Expense[], members: Member[] }) {
+  if (expenses.length === 0) return null;
+
+  const categoryTotals = expenses.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] || 0) + e.total;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const categoryData = Object.entries(categoryTotals).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+  const totalCat = categoryData.reduce((acc, c) => acc + c.value, 0);
+
+  let startAngleCat = 0;
+  const categoryGradient = categoryData.map((d, i) => {
+    const endAngle = startAngleCat + (d.value / totalCat) * 360;
+    const color = `hsl(${i * 137.5 % 360}, 70%, 50%)`;
+    const str = `${color} ${startAngleCat}deg ${endAngle}deg`;
+    startAngleCat = endAngle;
+    return str;
+  }).join(', ');
+
+  const paidTotals = expenses.reduce((acc, e) => {
+    const payers = payersOf(e);
+    payers.forEach(p => {
+      acc[p.memberId] = (acc[p.memberId] || 0) + p.amount;
+    });
+    return acc;
+  }, {} as Record<string, number>);
+
   const nameOf = (id: string): string => members.find((m: Member) => m.id === id)?.name || 'Unknown';
+  const paidData = Object.entries(paidTotals).map(([id, value]) => ({ name: nameOf(id), value })).sort((a,b)=>b.value-a.value);
+  const totalPaid = paidData.reduce((acc, c) => acc + c.value, 0);
+
+  let startAnglePaid = 0;
+  const paidGradient = paidData.map((d, i) => {
+    const endAngle = startAnglePaid + (d.value / totalPaid) * 360;
+    const color = `hsl(${i * 137.5 % 360}, 70%, 50%)`;
+    const str = `${color} ${startAnglePaid}deg ${endAngle}deg`;
+    startAnglePaid = endAngle;
+    return str;
+  }).join(', ');
+
+  return (
+    <div className="flex flex-col md:flex-row gap-5 mb-5 mt-5">
+      <div className="flex-1 rounded-2xl border border-rule bg-surface p-5 flex flex-col items-center">
+        <h3 className="font-display text-lg mb-4 tracking-tight">Expenses by Category</h3>
+        <div style={{ width: '150px', height: '150px', borderRadius: '50%', background: `conic-gradient(${categoryGradient})` }}></div>
+        <div className="mt-4 flex flex-wrap gap-2 justify-center">
+          {categoryData.map((d, i) => (
+            <div key={d.name} className="flex items-center gap-1 text-xs text-ink-muted">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: `hsl(${i * 137.5 % 360}, 70%, 50%)` }}></div>
+              <span>{d.name.charAt(0).toUpperCase() + d.name.slice(1)} (₹{d.value})</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 rounded-2xl border border-rule bg-surface p-5 flex flex-col items-center">
+        <h3 className="font-display text-lg mb-4 tracking-tight">Who Paid Most</h3>
+        <div style={{ width: '150px', height: '150px', borderRadius: '50%', background: `conic-gradient(${paidGradient})` }}></div>
+        <div className="mt-4 flex flex-wrap gap-2 justify-center">
+          {paidData.map((d, i) => (
+            <div key={d.name} className="flex items-center gap-1 text-xs text-ink-muted">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: `hsl(${i * 137.5 % 360}, 70%, 50%)` }}></div>
+              <span>{d.name} (₹{d.value})</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) {
+  const [activeTab, setActiveTab] = useState<'All' | 'UPI' | 'Cash' | 'Card'>('All');
+  const nameOf = (id: string): string => members.find((m: Member) => m.id === id)?.name || 'Unknown';
+  
+  const filteredExpenses = expenses.filter(e => {
+    if (activeTab === 'All') return true;
+    const method = e.paymentMethod || 'UPI';
+    return method === activeTab;
+  });
+
   return (
     <div className="rounded-2xl border border-rule bg-surface p-5">
-      <h2 className="font-display text-xl tracking-tight">Expenses</h2>
-      {expenses.length === 0 ? (
+      <h2 className="font-display text-xl tracking-tight mb-3">Expenses</h2>
+      <div className="flex gap-2 mb-4">
+        {(['All', 'UPI', 'Cash', 'Card'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-3 py-1 text-[13px] rounded-full border transition-colors ${activeTab === tab ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+      {filteredExpenses.length === 0 ? (
         <p className="mt-2 text-sm text-ink-subtle">No expenses yet.</p>
       ) : (
-        // Rows separated by rules rather than boxed individually: a list of
-        // ringed cards inside a card is three nested containers deep.
         <ul className="mt-2 divide-y divide-rule overflow-hidden">
           <AnimatePresence initial={false}>
-          {expenses.map((e: Expense) => {
+          {filteredExpenses.map((e: Expense) => {
             const share = isEqualSplit(e) && e.splits.length > 1
               ? `split ${e.splits.length} ways · ₹${currency(e.splits[0].amount)} each`
               : `${e.splits.length} custom share${e.splits.length === 1 ? '' : 's'}`;
@@ -1300,9 +1421,9 @@ function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) 
                   <div className="truncate font-medium">{e.title}</div>
                   <div className="truncate text-sm text-ink-muted">
                     {e.category === 'settlement' && e.splits.length === 1 ? (
-                      `${payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid ${nameOf(e.splits[0].memberId)}`
+                      `${payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid ${nameOf(e.splits[0].memberId)}${e.paymentMethod ? ` via ${e.paymentMethod}` : ''}`
                     ) : (
-                      `${payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid · ${share}`
+                      `${payersOf(e).map((pay: Split) => nameOf(pay.memberId)).join(' and ')} paid · ${share}${e.paymentMethod ? ` via ${e.paymentMethod}` : ''}`
                     )}
                   </div>
                 </div>
@@ -2084,6 +2205,7 @@ export default function TripExpenseApp() {
                     updateTrip(upd); 
                   }} 
                 />
+                <TripCharts expenses={current.expenses} members={current.members} />
 
                 <ExpenseList 
                   expenses={current.expenses} 
