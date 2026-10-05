@@ -472,18 +472,20 @@ function useLocalState<T>(key: string, initial: T): [T, React.Dispatch<React.Set
     }
   };
   const [state, setState] = useState<T>(() => read(key));
-  // The key changes when someone signs in or out, and the state has to follow
-  // it. Without this, a sign-in would write the anonymous trips into the
-  // account's key on the next render.
-  const previousKey = React.useRef(key);
+  // Track which key the current state belongs to.
+  // This prevents the old state from being written to the new key when the key changes.
+  const stateKey = React.useRef(key);
   useEffect(() => {
-    if (previousKey.current === key) return;
-    previousKey.current = key;
+    if (stateKey.current === key) return;
+    stateKey.current = key;
     setState(read(key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(state));
+    // Only write to localStorage if the state actually belongs to this key.
+    if (stateKey.current === key) {
+      localStorage.setItem(key, JSON.stringify(state));
+    }
   }, [key, state]);
   return [state, setState];
 }
@@ -1006,7 +1008,12 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
           <input
             value={total}
             inputMode="decimal"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTotal(e.target.value); clearError('total'); }}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              const val = e.target.value;
+              if (val !== '' && !/^\d*\.?\d*$/.test(val)) return;
+              setTotal(val);
+              clearError('total');
+            }}
             placeholder="Total Amount"
             aria-invalid={!!errors.total}
             aria-describedby={errors.total ? 'expense-total-error' : undefined}
@@ -1095,7 +1102,9 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
                   className={`flex-1 min-h-[2.75rem] rounded-full bg-surface px-4 py-3 text-sm tnum border transition ${errors.payers ? 'border-debit' : 'border-rule focus:border-accent'}`}
                   value={payerAmounts[m.id] ?? ''}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    setPayerAmounts((prev) => ({ ...prev, [m.id]: e.target.value }));
+                    const val = e.target.value;
+                    if (val !== '' && !/^\d*\.?\d*$/.test(val)) return;
+                    setPayerAmounts((prev) => ({ ...prev, [m.id]: val }));
                     clearError('payers');
                   }}
                   placeholder="0"
@@ -1169,7 +1178,12 @@ function ExpenseForm({ members, onAdd, editingExpense, onUpdate, onCancel, exist
                   inputMode="decimal"
                   className={`flex-1 rounded-lg bg-surface p-2.5 text-sm tnum border transition ${errors.splits ? 'border-debit' : 'border-rule focus:border-accent'}`}
                   value={customSplits[m.id] ?? ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setCustomSplits(prev => ({ ...prev, [m.id]: e.target.value })); clearError('splits'); }}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    const val = e.target.value;
+                    if (val !== '' && !/^\d*\.?\d*$/.test(val)) return;
+                    setCustomSplits(prev => ({ ...prev, [m.id]: val }));
+                    clearError('splits');
+                  }}
                   placeholder="0"
                 />
               </div>
@@ -1315,24 +1329,21 @@ function TripCharts({ expenses, members }: { expenses: Expense[], members: Membe
     return str;
   }).join(', ');
 
-  const paidTotals = expenses.reduce((acc, e) => {
-    const payers = payersOf(e);
-    payers.forEach(p => {
-      acc[p.memberId] = (acc[p.memberId] || 0) + p.amount;
-    });
+  const methodTotals = expenses.reduce((acc, e) => {
+    const method = e.paymentMethod || 'UPI';
+    acc[method] = (acc[method] || 0) + e.total;
     return acc;
   }, {} as Record<string, number>);
 
-  const nameOf = (id: string): string => members.find((m: Member) => m.id === id)?.name || 'Unknown';
-  const paidData = Object.entries(paidTotals).map(([id, value]) => ({ name: nameOf(id), value })).sort((a,b)=>b.value-a.value);
-  const totalPaid = paidData.reduce((acc, c) => acc + c.value, 0);
+  const methodData = Object.entries(methodTotals).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+  const totalMethod = methodData.reduce((acc, c) => acc + c.value, 0);
 
-  let startAnglePaid = 0;
-  const paidGradient = paidData.map((d, i) => {
-    const endAngle = startAnglePaid + (d.value / totalPaid) * 360;
+  let startAngleMethod = 0;
+  const methodGradient = methodData.map((d, i) => {
+    const endAngle = startAngleMethod + (d.value / totalMethod) * 360;
     const color = `hsl(${i * 137.5 % 360}, 70%, 50%)`;
-    const str = `${color} ${startAnglePaid}deg ${endAngle}deg`;
-    startAnglePaid = endAngle;
+    const str = `${color} ${startAngleMethod}deg ${endAngle}deg`;
+    startAngleMethod = endAngle;
     return str;
   }).join(', ');
 
@@ -1345,19 +1356,19 @@ function TripCharts({ expenses, members }: { expenses: Expense[], members: Membe
           {categoryData.map((d, i) => (
             <div key={d.name} className="flex items-center gap-1 text-xs text-ink-muted">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: `hsl(${i * 137.5 % 360}, 70%, 50%)` }}></div>
-              <span>{d.name.charAt(0).toUpperCase() + d.name.slice(1)} (₹{d.value})</span>
+              <span>{d.name.charAt(0).toUpperCase() + d.name.slice(1)} (₹{currency(d.value)})</span>
             </div>
           ))}
         </div>
       </div>
       <div className="flex-1 rounded-2xl border border-rule bg-surface p-5 flex flex-col items-center">
-        <h3 className="font-display text-lg mb-4 tracking-tight">Who Paid Most</h3>
-        <div style={{ width: '150px', height: '150px', borderRadius: '50%', background: `conic-gradient(${paidGradient})` }}></div>
+        <h3 className="font-display text-lg mb-4 tracking-tight">Payment Methods</h3>
+        <div style={{ width: '150px', height: '150px', borderRadius: '50%', background: `conic-gradient(${methodGradient})` }}></div>
         <div className="mt-4 flex flex-wrap gap-2 justify-center">
-          {paidData.map((d, i) => (
+          {methodData.map((d, i) => (
             <div key={d.name} className="flex items-center gap-1 text-xs text-ink-muted">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: `hsl(${i * 137.5 % 360}, 70%, 50%)` }}></div>
-              <span>{d.name} (₹{d.value})</span>
+              <span>{d.name} (₹{currency(d.value)})</span>
             </div>
           ))}
         </div>
@@ -1371,6 +1382,13 @@ function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) 
   const [activeTab, setActiveTab] = useState<'All' | 'UPI' | 'Cash' | 'Card'>('All');
   const nameOf = (id: string): string => members.find((m: Member) => m.id === id)?.name || 'Unknown';
   
+  const methodTotals = expenses.reduce((acc, e) => {
+    const method = e.paymentMethod || 'UPI';
+    acc[method] = (acc[method] || 0) + Number(e.total);
+    acc['All'] = (acc['All'] || 0) + Number(e.total);
+    return acc;
+  }, { All: 0, UPI: 0, Cash: 0, Card: 0 } as Record<string, number>);
+
   const filteredExpenses = expenses.filter(e => {
     if (activeTab === 'All') return true;
     const method = e.paymentMethod || 'UPI';
@@ -1387,7 +1405,7 @@ function ExpenseList({ expenses, members, onDelete, onEdit }: ExpenseListProps) 
             onClick={() => setActiveTab(tab)}
             className={`px-3 py-1 text-[13px] rounded-full border transition-colors ${activeTab === tab ? 'bg-ink text-canvas border-ink' : 'bg-surface text-ink-muted border-rule hover:bg-sunken'}`}
           >
-            {tab}
+            {tab} {methodTotals[tab] > 0 ? `(₹${currency(methodTotals[tab])})` : ''}
           </button>
         ))}
       </div>
